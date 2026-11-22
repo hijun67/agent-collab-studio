@@ -1,0 +1,7 @@
+node_modules/
+dist/
+.wrangler/
+.preview/
+_preview-live.png
+_preview-mobile.png
+.DS_Store
