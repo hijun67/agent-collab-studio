@@ -1200,7 +1200,7 @@
     meta.push('<span class="meta">의도 <b>' + esc(p.intentLabel) + '</b></span>');
     meta.push('<span class="meta">기간 <b>' + esc(p.deadline ? p.deadline.label : '미정') + '</b></span>');
     meta.push('<span class="meta">대상 <b>' + esc(p.audience) + '</b></span>');
-    p.constraints.slice(0, 3).forEach((c) => meta.push('<span class="meta">' + esc(c.label) + '</span>'));
+    p.constraints.filter((c) => c.type !== 'time').slice(0, 3).forEach((c) => meta.push('<span class="meta">' + esc(c.label) + '</span>'));
     $('#missionMeta').innerHTML = meta.join('');
     $('#missionSub').textContent = p.title.length > 34 ? cut(p.title, 34) : p.title;
   }
