@@ -273,7 +273,7 @@
     },
     event: {
       label: '행사·모임',
-      keys: ['행사', '모임', '파티', '클럽', '워크숍', '세미나', '축제', '동아리', '정기모임', '참석'],
+      keys: ['행사', '모임', '파티', '클럽', '워크숍', '세미나', '축제', '동아리', '정기모임', '참석', '멤버', '회원', '참여자', '운영진'],
       deliverable: '진행표와 역할 분담이 끝난 운영 계획',
       steps: [
         { name: '목적·인원 확정', detail: '"{kw}"의 목적을 한 문장으로, 인원을 최소·최대로 정합니다.', output: '목적·인원표' },
@@ -366,12 +366,15 @@
         if (STOP.has(t)) return;
         if (/^[0-9]/.test(t) && t.length <= 4) return;
         if (/(하다|한다|했다|하는|하여|되다|된다|되는|있는|없는|같은|싶은|해야|합니다|입니다|해요|이며|하며|지만|면서|라고|라는)$/.test(t) && t.length > 3) return;
+        if (/[가-힣]하$/.test(t) && t.length >= 3) return;
         counts.set(t, (counts.get(t) || 0) + weight + Math.min(t.length, 7) * 0.08);
       });
     };
     bump(input.title, 3);
     bump(input.goal, 2.1);
     bump(input.context, 1.4);
+    const PLATFORM = ['네이버', '구글', '유튜브', '인스타', '인스타그램', '카카오', '페이스북', '트위터', '틱톡', '쿠팡', '당근', '스레드', '링크드인', '깃허브', 'github', 'notion', '노션'];
+    counts.forEach((v, k) => { if (PLATFORM.indexOf(k) >= 0) counts.set(k, v * 0.5); });
     return Array.from(counts.entries())
       .sort((a, b) => b[1] - a[1] || b[0].length - a[0].length)
       .map((e) => e[0])
@@ -444,8 +447,15 @@
     }
     if (/혼자|1인|개인\s*프로젝트|싱글/.test(s)) add('people', '혼자 진행');
     else {
-      const p = s.match(/([0-9]+)\s*명/);
-      if (p) add('people', p[1] + '명');
+      const people = [];
+      const re = /([0-9]+)\s*명/g;
+      let m2;
+      while ((m2 = re.exec(s)) !== null) {
+        const before = s.slice(Math.max(0, m2.index - 10), m2.index);
+        if (/유입|방문|조회|구독|팔로|하루|매일|일일|누적|목표|전체/.test(before)) continue;
+        people.push(m2[1] + '명');
+      }
+      people.slice(0, 2).forEach((v) => add('people', v));
     }
     if (/api\s*키\s*없|키\s*없|노코드|서버\s*없|오프라인|무료\s*도구|api\s*없/.test(s)) add('tool', '무료 도구·API 키 없이');
     if (/초보|입문|처음|왕초보/.test(s)) add('level', '초보자 대상');
@@ -666,7 +676,9 @@
 
   function scheduleLine(p) {
     if (!p.deadline) return '기간이 정해지지 않아 2주를 기본값으로 잡았습니다. 실제 마감이 있으면 알려 주세요.';
-    return p.deadline.label + ' 기준으로 역산했습니다(하루 ' + (p.hoursPerDay % 1 === 0 ? p.hoursPerDay : p.hoursPerDay.toFixed(1)) + '시간 가용).';
+    const hours = p.hoursPerDay % 1 === 0 ? p.hoursPerDay : p.hoursPerDay.toFixed(1);
+    const explicit = p.constraints.some((c) => c.type === 'timeuse');
+    return p.deadline.label + ' 기준으로 역산했습니다(하루 ' + hours + '시간 ' + (explicit ? '가용' : '가정') + ').';
   }
 
   function scopeWord(p) {
