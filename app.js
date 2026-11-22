@@ -891,6 +891,7 @@
     if (stage === 1) {
       const html = fb +
         '<p>과제 <b>"' + esc(p.title) + '"</b>' + josa(p.title, '을') + ' 시작합니다. 제가 총괄하고, <span class="mention">@제미나이 태스크</span>가 실행 구조를, <span class="mention">@코덱스</span>가 논리와 리스크를 맡습니다.</p>' +
+        (extrasOf(state.extras).length ? '<p>가이드에서 데려온 <b>' + extrasOf(state.extras).map((a) => esc(a.name) + '(' + esc(a.roleKo) + ')').join(', ') + '</b>도 함께합니다 — 각자 맡은 역할에서 발언하고 태스크를 하나씩 가져갑니다.</p>' : '') +
         '<p>제가 읽은 과제는 <b>' + esc(p.domainLabel) + ' · ' + esc(p.intentLabel) + '</b> 유형이고, 핵심어는 ' + k.slice(0, 3).map((x) => '<b>' + esc(x) + '</b>').join(', ') + '입니다. 목표는 이렇게 이해했습니다 — ' + esc(p.goalShort) + '</p>' +
         (p.constraints.length ? bullets(p.constraints.slice(0, 4).map((c) => '<b>' + esc(c.label) + '</b>')) : '') +
         '<p><b>성공 기준 3개</b>입니다. 이 셋만 보겠습니다.</p>' +
@@ -1051,7 +1052,7 @@
     const step0 = p.steps[0] || { name: '1단계', output: '첫 결과물' };
     const step1 = p.steps[1] || step0;
     const taskId = extraTaskId(def);
-    const taskOps = taskId ? [{ id: taskId, status: first ? 'in_progress' : 'done' }] : [];
+    const taskOps = stage === 1 || !taskId ? [] : [{ id: taskId, status: first ? 'in_progress' : 'done' }];
     const turn = extraTurnDef(def);
     Object.assign(turn, { stage: stage, tasks: taskOps });
     const head = '<p>저는 <b>' + esc(label) + '</b>' + josa(label, '을') + ' 맡았습니다. 한도는 <b>' + esc(limit) + '</b>입니다.</p>';
@@ -1060,7 +1061,8 @@
     let html = '';
 
     if (stage === 1) {
-      html = '<p><b>' + esc(label) + '</b>으로 합류했습니다. 한도 <b>' + esc(limit) + '</b> 안에서 <b>' + esc(step0.name) + '</b>부터 보고, 제 몫인 <b>' + esc(role ? role.output : label) + '</b>' + josa(role ? role.output : label, '을') + ' 넘기겠습니다.</p>';
+      const myOut = role ? role.output : label;
+      html = '<p><b>' + esc(label) + '</b>' + josa(label, '으로') + ' 합류했습니다. 먼저 <b>' + esc(step0.name) + '</b>' + josa(step0.name, '을') + ' 보고, 제 몫인 <b>' + esc(myOut) + '</b>' + josa(myOut, '을') + ' 넘기겠습니다.</p>';
       turn.html = html;
       return turn;
     }
