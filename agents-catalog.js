@@ -1,0 +1,437 @@
+/* 자동 생성 파일 — 원본은 agents-catalog.json 입니다. 직접 고치지 마세요. */
+window.ACS_CATALOG = {
+  "version": "1.1.0",
+  "updated": "2026-11-22",
+  "note": "무료 에이전트 가이드(GUIDE) 13개 항목과 팀 투입 역할 정의. 일일 스캔은 tools 배열에 항목을 추가하고 injectable·role을 지정하면 된다.",
+  "roles": [
+    {
+      "id": "lead",
+      "label": "총괄",
+      "kind": "fixed",
+      "hint": "목표·조율·최종 종합",
+      "stages": [
+        1,
+        4,
+        7,
+        10
+      ],
+      "task": "범위·성공 기준 확정과 최종 종합",
+      "output": "최종 결과물 리포트"
+    },
+    {
+      "id": "exec",
+      "label": "실행",
+      "kind": "fixed",
+      "hint": "실행 분해·일정·리소스",
+      "stages": [
+        2,
+        5,
+        8
+      ],
+      "task": "실행 5단계·일정 설계",
+      "output": "실행 단계 초안·체크리스트"
+    },
+    {
+      "id": "verify",
+      "label": "검증",
+      "kind": "fixed",
+      "hint": "허점·리스크·품질 기준",
+      "stages": [
+        3,
+        6,
+        9
+      ],
+      "task": "리스크·품질 게이트 검증",
+      "output": "리스크 점검·품질 기준"
+    },
+    {
+      "id": "code",
+      "label": "코드 구현/PR",
+      "kind": "inject",
+      "hint": "저장소를 고쳐 PR로 넘김",
+      "stages": [
+        2,
+        5
+      ],
+      "task": "코드 변경 PR 3건 생성·셀프 리뷰",
+      "output": "PR 3건 링크와 변경 요약"
+    },
+    {
+      "id": "ide",
+      "label": "IDE/CLI 실행",
+      "kind": "inject",
+      "hint": "편집기·터미널에서 직접 실행",
+      "stages": [
+        5,
+        8
+      ],
+      "task": "IDE·CLI 실행 순서와 오류 수정 기록",
+      "output": "실행 명령 순서와 오류 수정 로그"
+    },
+    {
+      "id": "browser",
+      "label": "브라우저 검증",
+      "kind": "inject",
+      "hint": "화면·로그인 흐름을 직접 확인",
+      "stages": [
+        3,
+        6
+      ],
+      "task": "실제 화면 시나리오 3건 검증",
+      "output": "화면 검증 시나리오와 확인 결과"
+    },
+    {
+      "id": "local",
+      "label": "로컬 추론/초안",
+      "kind": "inject",
+      "hint": "내 PC 모델로 초안·요약 생성",
+      "stages": [
+        2,
+        7
+      ],
+      "task": "로컬 모델로 초안 3편 생성",
+      "output": "로컬 모델 초안 3편"
+    },
+    {
+      "id": "research",
+      "label": "리서치/비교",
+      "kind": "inject",
+      "hint": "여러 서비스의 조건·가격 비교",
+      "stages": [
+        3,
+        6
+      ],
+      "task": "무료 조건·가격 비교표 1장",
+      "output": "무료 조건 비교표 1장"
+    },
+    {
+      "id": "spec",
+      "label": "스펙 설계",
+      "kind": "inject",
+      "hint": "요구사항을 스펙 문서로 고정",
+      "stages": [
+        2,
+        6
+      ],
+      "task": "스펙 문서 3장(범위·인터페이스·완료 조건)",
+      "output": "스펙 문서 3장"
+    },
+    {
+      "id": "docs",
+      "label": "문서/정리",
+      "kind": "inject",
+      "hint": "문서·안내문 정리",
+      "stages": [
+        7,
+        8
+      ],
+      "task": "결과물 문서·README 정리",
+      "output": "README·브리프 정리본"
+    },
+    {
+      "id": "qa",
+      "label": "테스트/QA",
+      "kind": "inject",
+      "hint": "재현·회귀 테스트로 확인",
+      "stages": [
+        3,
+        9
+      ],
+      "task": "재현 절차·회귀 체크 12건 실행",
+      "output": "회귀 체크 12건 결과"
+    }
+  ],
+  "core": [
+    "pickle",
+    "gemini",
+    "codex"
+  ],
+  "tools": [
+    {
+      "id": "pickle",
+      "cat": "assistant",
+      "name": "피클",
+      "en": "Pickle",
+      "free": "free",
+      "badge": "무료 플랜",
+      "one": "일정·웹·메일·생활 행정·배포까지 직접 처리하는 개인 비서형 에이전트.",
+      "scope": "무료 플랜 제공 · 브라우저·일정·메일·생활 행정·사이트 배포를 도구로 직접 실행",
+      "mission": {
+        "title": "피클로 생활 행정 5건 일괄 처리",
+        "goal": "2주 안에 미뤄 둔 서류 제출·예약·문의 5건을 피클에게 맡겨 직접 끝낸다",
+        "context": "무료 플랜, 하루 30분, 예산 0원, 결제·계약은 본인 승인 후 진행"
+      },
+      "agentId": "pickle",
+      "injectable": false,
+      "self": false,
+      "initial": "피",
+      "color": "#5eead4",
+      "limit": "",
+      "role": "lead"
+    },
+    {
+      "id": "gemini-tasks",
+      "cat": "assistant",
+      "name": "제미나이 태스크",
+      "en": "Gemini Tasks",
+      "free": "free",
+      "badge": "무료 (2026-11 오픈)",
+      "one": "조사·정리·일정처럼 반복되는 작업을 대신 실행하는 구글의 작업 실행 에이전트.",
+      "scope": "2026년 11월부터 한국 포함 무료 사용자에게도 오픈 · 구글 계정으로 사용",
+      "mission": {
+        "title": "제미나이 태스크로 주간 조사 업무 자동화",
+        "goal": "3주 안에 매주 반복되는 시장 조사 3건을 제미나이 태스크에 맡겨 보고서 초안까지 받는다",
+        "context": "구글 계정 무료 사용, 평일 저녁 하루 1시간, 예산 0원, 조사 주제는 생활 금융"
+      },
+      "agentId": "gemini",
+      "injectable": false,
+      "self": false,
+      "initial": "G",
+      "color": "#60a5fa",
+      "limit": "",
+      "role": "exec"
+    },
+    {
+      "id": "codex",
+      "cat": "coding",
+      "name": "코덱스",
+      "en": "Codex · ChatGPT Free",
+      "free": "partial",
+      "badge": "부분 무료",
+      "one": "코드를 읽고 고치고 테스트까지 돌리는 코딩 에이전트.",
+      "scope": "ChatGPT 무료 플랜 데스크톱 앱에서 사용 가능 · 웹·CLI·IDE 확장은 유료",
+      "mission": {
+        "title": "코덱스 무료판으로 4컷 생성기 버그 3건 수정",
+        "goal": "1주 안에 4컷 생성기의 이미지 저장·중복 클릭·모바일 레이아웃 문제 3건을 고쳐 다시 배포한다",
+        "context": "ChatGPT 무료 플랜 데스크톱 앱만 사용, 평일 저녁 하루 2시간, 예산 0원, 코드는 GitHub 저장소 그대로"
+      },
+      "agentId": "codex",
+      "injectable": false,
+      "self": false,
+      "initial": "C",
+      "color": "#c4b5fd",
+      "limit": "",
+      "role": "verify"
+    },
+    {
+      "id": "antigravity",
+      "cat": "coding",
+      "name": "Google Antigravity",
+      "en": "Antigravity",
+      "free": "partial",
+      "badge": "주간 무료 할당량",
+      "one": "편집기 안에서 계획·실행·검증을 나눠 돌리는 구글의 에이전트 IDE·CLI.",
+      "scope": "주간 무료 할당량 제공 · 할당량을 다 쓰면 다음 주기까지 대기",
+      "mission": {
+        "title": "Antigravity 주간 할당량으로 뉴스 검색 앱 개선",
+        "goal": "1주 안에 뉴스 검색 앱에 필터 1개를 추가하고 주간 무료 할당량 안에서 테스트까지 끝낸다",
+        "context": "주간 무료 할당량만 사용, 평일 저녁 하루 1시간, 예산 0원, Windows 데스크톱"
+      },
+      "agentId": "antigravity",
+      "injectable": true,
+      "self": false,
+      "initial": "A",
+      "color": "#c4b5fd",
+      "limit": "주간 무료 할당량",
+      "role": "ide"
+    },
+    {
+      "id": "jules",
+      "cat": "coding",
+      "name": "Google Jules",
+      "en": "Jules",
+      "free": "free",
+      "badge": "무료 · 일 15태스크",
+      "one": "GitHub 저장소를 맡기면 비동기로 고쳐 오는 코딩 에이전트.",
+      "scope": "GitHub 저장소를 연결해 하루 15개 태스크까지 무료 실행",
+      "mission": {
+        "title": "Jules로 저장소 문서·테스트 정리 15태스크",
+        "goal": "5일 안에 GitHub 저장소의 문서·테스트 정리 작업 15개를 Jules에 맡겨 PR로 받는다",
+        "context": "하루 15개 태스크 한도, 무료 플랜, 평일 저녁 하루 30분 검토, 예산 0원"
+      },
+      "agentId": "jules",
+      "injectable": true,
+      "self": false,
+      "initial": "J",
+      "color": "#c4b5fd",
+      "limit": "하루 15태스크",
+      "role": "code"
+    },
+    {
+      "id": "copilot",
+      "cat": "coding",
+      "name": "GitHub Copilot Free",
+      "en": "Copilot Free",
+      "free": "free",
+      "badge": "무료 티어",
+      "one": "편집기 안 자동완성과 제한된 에이전트 모드를 주는 무료 티어.",
+      "scope": "월 2,000회 자동완성 + 제한된 에이전트 사용 · 카드 등록 없이 시작",
+      "mission": {
+        "title": "Copilot 무료로 블로그 도구 리팩토링",
+        "goal": "2주 안에 블로그 이전 도구의 중복 코드 3곳을 정리하고 자동완성 월 한도 안에서 마무리한다",
+        "context": "월 2,000회 자동완성 한도, VS Code, 평일 저녁 하루 1시간, 예산 0원"
+      },
+      "agentId": "copilot",
+      "injectable": true,
+      "self": false,
+      "initial": "C",
+      "color": "#c4b5fd",
+      "limit": "월 2,000회 자동완성",
+      "role": "code"
+    },
+    {
+      "id": "cursor",
+      "cat": "coding",
+      "name": "Cursor Free",
+      "en": "Cursor",
+      "free": "free",
+      "badge": "무료 티어",
+      "one": "AI가 처음부터 붙어 있는 코드 에디터의 무료 티어.",
+      "scope": "무료 티어 제공 · 고급 모델·에이전트 요청은 월 한도 안에서 사용",
+      "mission": {
+        "title": "Cursor 무료 티어로 랜딩 페이지 1장 만들기",
+        "goal": "1주 안에 랜딩 페이지 1장을 Cursor로 작성하고 모바일 화면까지 확인한다",
+        "context": "무료 티어 한도, 하루 1시간, 예산 0원, 정적 HTML/CSS"
+      },
+      "agentId": "cursor",
+      "injectable": true,
+      "self": false,
+      "initial": "Cu",
+      "color": "#c4b5fd",
+      "limit": "무료 티어 월 한도",
+      "role": "ide"
+    },
+    {
+      "id": "kiro",
+      "cat": "coding",
+      "name": "AWS Kiro",
+      "en": "Kiro",
+      "free": "free",
+      "badge": "무료 · 월 50크레딧",
+      "one": "스펙을 먼저 쓰게 하는 스펙 주도 개발 IDE.",
+      "scope": "월 50크레딧 제공 · 소진되면 다음 달까지 대기",
+      "mission": {
+        "title": "Kiro 월 50크레딧으로 스펙 문서 3장 작성",
+        "goal": "이번 달 안에 다음 기능 스펙 문서 3장을 Kiro로 작성하고 크레딧 50개 안에서 끝낸다",
+        "context": "월 50크레딧, 주말 하루 2시간, 예산 0원"
+      },
+      "agentId": "kiro",
+      "injectable": true,
+      "self": false,
+      "initial": "K",
+      "color": "#c4b5fd",
+      "limit": "월 50크레딧",
+      "role": "spec"
+    },
+    {
+      "id": "comet",
+      "cat": "browser",
+      "name": "Perplexity Comet",
+      "en": "Comet",
+      "free": "free",
+      "badge": "무료 다운로드",
+      "one": "탭을 읽고 클릭·입력까지 대신하는 AI 브라우저 에이전트.",
+      "scope": "무료로 내려받아 사용 · ChatGPT Work · Claude in Chrome은 유료",
+      "mission": {
+        "title": "Comet으로 경쟁사 가격 조사 자동화",
+        "goal": "1주 안에 경쟁 서비스 5곳의 가격·무료 조건을 Comet으로 훑어 비교표 1장으로 만든다",
+        "context": "무료 브라우저, 하루 30분, 예산 0원, 결제·로그인은 하지 않음"
+      },
+      "agentId": "comet",
+      "injectable": true,
+      "self": false,
+      "initial": "Pe",
+      "color": "#60a5fa",
+      "limit": "무료 브라우저",
+      "role": "browser"
+    },
+    {
+      "id": "browser-use",
+      "cat": "browser",
+      "name": "Browser Use",
+      "en": "browser-use",
+      "free": "free",
+      "badge": "오픈소스 MIT",
+      "one": "파이썬으로 브라우저 조작을 자동화하는 오픈소스 라이브러리.",
+      "scope": "MIT 라이선스로 직접 실행 · 클라우드는 가입 시 1달러 무료 크레딧",
+      "mission": {
+        "title": "Browser Use로 반복 조회 스크립트 만들기",
+        "goal": "2주 안에 매일 확인하는 사이트 3곳을 자동으로 조회해 결과를 CSV로 남기는 스크립트를 만든다",
+        "context": "오픈소스 MIT, 파이썬, 하루 1시간, 예산 0원, 클라우드는 무료 크레딧만"
+      },
+      "agentId": "browser-use",
+      "injectable": true,
+      "self": false,
+      "initial": "B",
+      "color": "#60a5fa",
+      "limit": "오픈소스 · 무료 크레딧 1달러",
+      "role": "browser"
+    },
+    {
+      "id": "ollama",
+      "cat": "local",
+      "name": "Ollama + 오픈 모델",
+      "en": "Ollama · Qwen 등",
+      "free": "free",
+      "badge": "완전 무료 · 로컬",
+      "one": "내 PC·맥에서 오픈 모델을 무제한으로 돌리는 로컬 실행기.",
+      "scope": "내 PC·맥에서 실행 · API 비용 0원, 모델 크기만큼 메모리 필요",
+      "mission": {
+        "title": "Ollama 로컬 모델로 블로그 초안 3편 생성",
+        "goal": "2주 안에 Ollama와 Qwen 모델로 블로그 초안 3편을 만들고 발행 가능한 수준까지 다듬는다",
+        "context": "내 PC에서 실행, API 비용 0원, 하루 1시간, 16GB 메모리"
+      },
+      "agentId": "ollama",
+      "injectable": true,
+      "self": false,
+      "initial": "O",
+      "color": "#fbbf24",
+      "limit": "로컬 실행 · API 비용 0원",
+      "role": "local"
+    },
+    {
+      "id": "openrouter",
+      "cat": "local",
+      "name": "OpenRouter 무료 모델",
+      "en": "OpenRouter",
+      "free": "free",
+      "badge": "무료 티어",
+      "one": "여러 모델을 한 API로 갈아 쓰는 라우터의 무료 모델.",
+      "scope": "무료 모델 기준 분당 20회 · 하루 50회",
+      "mission": {
+        "title": "OpenRouter 무료 모델로 뉴스 요약 실험",
+        "goal": "1주 안에 OpenRouter 무료 모델 2개로 뉴스 요약 품질을 비교하고 쓸 모델 1개를 고른다",
+        "context": "분당 20회·일 50회 한도, 하루 30분, 예산 0원"
+      },
+      "agentId": "openrouter",
+      "injectable": true,
+      "self": false,
+      "initial": "Or",
+      "color": "#fbbf24",
+      "limit": "분당 20회·하루 50회",
+      "role": "research"
+    },
+    {
+      "id": "agent-collab-studio",
+      "cat": "local",
+      "name": "Agent Collab Studio",
+      "en": "이 화면",
+      "free": "free",
+      "badge": "무료 · 설치 불필요",
+      "one": "피클·제미나이 태스크·코덱스가 역할을 나눠 협업하는 다중 에이전트 워크플로우.",
+      "scope": "API 키 0원 · 브라우저에서 바로 실행, 대화·결과물은 이 브라우저에만 저장",
+      "mission": {
+        "title": "Agent Collab Studio로 3자 협업 과제 설계",
+        "goal": "이번 주 안에 실제로 진행할 과제 2개를 10턴 협업으로 돌려 실행안과 체크리스트를 뽑는다",
+        "context": "API 키 0원, 브라우저만 사용, 하루 30분, 역할 분담은 피클·제미나이 태스크·코덱스"
+      },
+      "agentId": "agent-collab-studio",
+      "injectable": false,
+      "self": true,
+      "initial": "AC",
+      "color": "#5eead4",
+      "limit": "",
+      "role": "exec"
+    }
+  ]
+};

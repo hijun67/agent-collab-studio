@@ -33,7 +33,7 @@
         <div class="brand-text">
           <div class="brand-line">
             <h1>Agent Collab Studio</h1>
-            <span class="brand-badge">3-에이전트 협업</span>
+            <span class="brand-badge" id="brandBadge">3-에이전트 협업</span>
           </div>
           <p id="missionSub">피클이 이끄는 리드 · 서브 협업 콘솔</p>
         </div>
@@ -112,7 +112,7 @@
 
         <div class="panel-head">
           <span class="panel-title">참여 에이전트</span>
-          <span class="panel-hint">3명</span>
+          <span class="panel-hint" id="agentCountHint">3명</span>
         </div>
         <div id="agentList" class="agent-list"></div>
 
@@ -124,6 +124,7 @@
             <li><b>코덱스</b> 허점·리스크·대안 검증</li>
             <li><b>피클</b> 조율 후 최종 결과물 종합</li>
           </ol>
+          <ul class="protocol-list protocol-extra" id="protocolExtra" hidden></ul>
         </div>
       </div>
     </aside>
@@ -237,8 +238,6 @@
       </button>
     </div>
     <div class="modal-body">
-      <div class="preset-head"><span class="panel-title">바로 테스트할 추천 과제</span><span class="panel-hint">누르면 입력값이 채워집니다</span></div>
-      <div class="preset-grid" id="presetGrid"></div>
       <button type="button" class="guide-link" id="btnGuideFromModal">
         <svg viewBox="0 0 24 24" class="ico"><rect x="4" y="8" width="16" height="11" rx="3"/><path d="M9.2 12.6h.01M14.8 12.6h.01"/><path d="M12 4.6v3.4M8.4 19v2M15.6 19v2"/></svg>
         무료 에이전트 가이드에서 도구 고르기
@@ -258,6 +257,18 @@
           <span>배경 · 제약조건 <i>예산, 기간, 인원, 도구, 금지사항</i></span>
           <textarea id="inputContext" rows="2" maxlength="300" placeholder="예: 혼자 진행, 예산 0원, API 키 없이 무료 도구만, 평일 저녁 하루 1시간"></textarea>
         </label>
+
+        <div class="team-pick" id="teamPick">
+          <div class="team-head">
+            <span class="panel-title">참여 에이전트 · 역할</span>
+            <span class="panel-hint">기본 3인 + 가이드에서 추가</span>
+          </div>
+          <div class="team-core" id="teamCore"></div>
+          <div class="team-add" id="teamAdd"></div>
+          <div class="team-rows" id="teamRows"></div>
+          <p class="team-note" id="teamNote"></p>
+        </div>
+
         <div class="form-foot">
           <p class="form-note">입력한 문장에서 키워드·의도·제약을 실제로 분석해 협업 내용을 만듭니다. 고정 대본이 아닙니다.</p>
           <button type="submit" class="btn btn-primary">협업 시작</button>
@@ -326,7 +337,8 @@
         <svg viewBox="0 0 24 24" class="ico"><path d="M6 6l12 12M18 6L6 18"/></svg>
       </button>
     </div>
-    <p class="drawer-note">AI 에이전트를 <b>4가지 유형</b>으로 나눠 무료로 시작할 수 있는 도구만 모았습니다. 무료 범위·제한은 2026년 11월 기준이고, 카드의 버튼을 누르면 그 도구로 할 과제가 채워진 새 과제 창이 열립니다.</p>
+    <p class="drawer-note">AI 에이전트를 <b>4가지 유형</b>으로 나눠 무료로 시작할 수 있는 도구만 모았습니다. 무료 범위·제한은 2026년 11월 기준입니다. 카드의 <b>팀에 투입</b>을 누르면 지금 팀에 합류해 부여된 역할대로 발언하고, <b>과제 만들기</b>는 그 도구에 맞는 새 과제 창을 엽니다.</p>
+    <div class="guide-team" id="guideTeam"></div>
     <div class="guide-summary" id="guideSummary"></div>
     <div class="guide-filters" id="guideFilters" role="tablist" aria-label="에이전트 유형 필터"></div>
     <div class="drawer-body guide-body">
@@ -337,6 +349,7 @@
 
 <div class="toast" id="toast" hidden><span id="toastText"></span></div>
 
+<script src="agents-catalog.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

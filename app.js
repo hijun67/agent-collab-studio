@@ -649,12 +649,194 @@
   const TURN_TOTAL = 10;
   const STAGE_NAMES = ['미션 브리핑', '과제 분해', '심층 검증', '중간 조율', '수정 실행안', '품질 게이트', '산출물 작성', '실행 체크리스트', '최종 검증', '최종 종합'];
 
-  const AGENTS = [
-    { id: 'pickle', name: '피클', initial: '피', role: 'LEAD', roleKo: '총괄', sub: '오케스트레이터 · 최종 결과물 도출', color: '#5eead4', soft: 'rgba(94,234,212,.13)', bg: 'linear-gradient(135deg,#5eead4,#2dd4bf)' },
-    { id: 'gemini', name: '제미나이 태스크', initial: 'G', role: 'SUB', roleKo: '실행', sub: '실행 · 리서치 · 태스크 분해', color: '#60a5fa', soft: 'rgba(96,165,250,.13)', bg: 'linear-gradient(135deg,#60a5fa,#818cf8)' },
-    { id: 'codex', name: '코덱스', initial: 'C', role: 'SUB', roleKo: '검증', sub: '심층 추론 · 리스크 · 아키텍처 검증', color: '#c4b5fd', soft: 'rgba(196,181,253,.14)', bg: 'linear-gradient(135deg,#c4b5fd,#a78bfa)' }
+  /* ─────────── 4-0. 에이전트 카탈로그 (agents-catalog.json 원본) ───────────
+     가이드 13개 항목과 팀 투입 역할 정의는 agents-catalog.json 이 원본이고,
+     브라우저에서 파일 하나로도 열리도록 scripts/catalog.mjs 가 agents-catalog.js 사본을 만든다. */
+  const CATALOG = (window.ACS_CATALOG && typeof window.ACS_CATALOG === 'object') ? window.ACS_CATALOG : { tools: [], roles: [], core: [] };
+  const ROLES = (CATALOG.roles || []).slice();
+  const TOOLS = (CATALOG.tools || []).slice();
+  const roleById = (id) => ROLES.find((r) => r.id === id) || null;
+  const toolById = (id) => TOOLS.find((t) => t.id === id || t.agentId === id) || null;
+  const GUIDE = TOOLS;
+  const INJECTABLE = TOOLS.filter((t) => t.injectable);
+
+  function hexA(hex, a) {
+    const m = /^#?([0-9a-f]{6})$/i.exec(String(hex || ''));
+    if (!m) return 'rgba(96,165,250,' + a + ')';
+    const n = parseInt(m[1], 16);
+    return 'rgba(' + ((n >> 16) & 255) + ',' + ((n >> 8) & 255) + ',' + (n & 255) + ',' + a + ')';
+  }
+
+  const CORE_AGENTS = [
+    { id: 'pickle', guideId: 'pickle', name: '피클', initial: '피', role: 'LEAD', roleKo: '총괄', sub: '오케스트레이터 · 최종 결과물 도출', color: '#5eead4', soft: 'rgba(94,234,212,.13)', bg: 'linear-gradient(135deg,#5eead4,#2dd4bf)', fixed: true, roleId: 'lead' },
+    { id: 'gemini', guideId: 'gemini-tasks', name: '제미나이 태스크', initial: 'G', role: 'SUB', roleKo: '실행', sub: '실행 · 리서치 · 태스크 분해', color: '#60a5fa', soft: 'rgba(96,165,250,.13)', bg: 'linear-gradient(135deg,#60a5fa,#818cf8)', fixed: true, roleId: 'exec' },
+    { id: 'codex', guideId: 'codex', name: '코덱스', initial: 'C', role: 'SUB', roleKo: '검증', sub: '심층 추론 · 리스크 · 아키텍처 검증', color: '#c4b5fd', soft: 'rgba(196,181,253,.14)', bg: 'linear-gradient(135deg,#c4b5fd,#a78bfa)', fixed: true, roleId: 'verify' }
   ];
-  const agentById = (id) => AGENTS.find((a) => a.id === id) || null;
+
+  /* 카탈로그 항목 → 팀 에이전트 정의 */
+  function toolAgent(t, role, label) {
+    const r = role || roleById(t.role) || null;
+    const c = t.color || '#60a5fa';
+    return {
+      id: t.agentId || t.id, guideId: t.id, name: t.name, initial: t.initial || 'A',
+      role: 'SUB', roleKo: label || (r ? r.label : '실행'),
+      sub: (t.limit ? t.limit + ' · ' : '') + (r ? r.hint : t.one || ''),
+      color: c, soft: hexA(c, 0.13), bg: 'linear-gradient(135deg,' + c + ',' + c + 'aa)',
+      fixed: false, roleId: r ? r.id : (t.role || 'custom'), tool: t
+    };
+  }
+
+  function extrasOf(list) {
+    return (list || []).map((e) => {
+      const t = toolById(e.id);
+      if (!t || !t.injectable) return null;
+      const role = roleById(e.roleId);
+      const label = e.roleId === 'custom' ? roleLabelOf('custom', e.label) : null;
+      return toolAgent(t, role || null, label);
+    }).filter(Boolean);
+  }
+
+  /* 현재 팀 = 고정 3인 + 투입된 가이드 에이전트 */
+  function teamAgents() {
+    return CORE_AGENTS.concat(extrasOf(state.extras));
+  }
+
+  function agentById(id) {
+    const team = teamAgents();
+    const hit = team.find((a) => a.id === id) || team.find((a) => a.guideId === id);
+    if (hit) return hit;
+    const core = CORE_AGENTS.find((a) => a.id === id || a.guideId === id);
+    if (core) return core;
+    const t = toolById(id);
+    return t ? toolAgent(t, roleById(t.role)) : null;
+  }
+  function agentByName(name) {
+    return teamAgents().find((a) => a.name === name) || null;
+  }
+
+  /* ── 팀 구성: 고정 3인 + 투입한 가이드 에이전트(역할 지정) ── */
+  let draftExtras = [];               // 과제 시작 전 모달·가이드에서 고른 팀
+  function teamIsLive() { return !!(state.profile && !state.completed); }
+  function teamList() { return modalMode ? draftExtras : (teamIsLive() ? (state.extras || []) : draftExtras); }
+  const roleLabelOf = (roleId, custom) => roleId === 'custom' ? (String(custom || '').trim() || '직접 지정 역할') : ((roleById(roleId) || {}).label || '실행');
+
+  function nextTaskId() {
+    let max = 6;
+    state.tasks.forEach((t) => { const n = parseInt(String(t.id).replace(/\D/g, ''), 10); if (n > max) max = n; });
+    return 'T' + (max + 1);
+  }
+
+  function syncExtraTasks() {
+    if (!state.profile) return;
+    const extras = state.extras || [];
+    const kept = [];
+    let maxId = 6;
+    state.tasks.forEach((t) => { const n = parseInt(String(t.id).replace(/\D/g, ''), 10); if (n > maxId) maxId = n; });
+    extras.forEach((e) => {
+      const t = toolById(e.id);
+      if (!t) return;
+      const role = roleById(e.roleId);
+      const label = roleLabelOf(e.roleId, e.label);
+      const prev = state.tasks.find((x) => x.extraFor === t.id);
+      if (prev) { prev.roleLabel = label; prev.owner = t.name; kept.push(prev); return; }
+      maxId++;
+      kept.push({
+        id: 'T' + maxId, title: role ? role.task : (label + ' · ' + (t.one || '역할 수행')),
+        owner: t.name, status: 'todo', weight: 0.9, extraFor: t.id, roleLabel: label
+      });
+    });
+    state.tasks = state.tasks.filter((t) => !t.extraFor).concat(kept);
+    state.tasks.sort((a, b) => parseInt(String(a.id).replace(/\D/g, ''), 10) - parseInt(String(b.id).replace(/\D/g, ''), 10));
+  }
+
+  function addTeamAgent(id, roleId) {
+    const t = toolById(id);
+    if (!t || !t.injectable) return false;
+    const list = teamList().slice();
+    if (list.some((e) => e.id === t.id)) return false;
+    const rid = roleId || t.role;
+    list.push({ id: t.id, roleId: rid, label: roleLabelOf(rid) });
+    applyTeamList(list);
+    return true;
+  }
+  function removeTeamAgent(id) {
+    const t = toolById(id);
+    const key = t ? t.id : id;
+    const list = teamList().filter((e) => e.id !== key);
+    if (list.length === teamList().length) return false;
+    applyTeamList(list);
+    return true;
+  }
+  function setTeamRole(id, roleId, custom) {
+    const t = toolById(id);
+    const key = t ? t.id : id;
+    const list = teamList().map((e) => e.id === key ? Object.assign({}, e, { roleId: roleId, label: roleLabelOf(roleId, custom) }) : e);
+    applyTeamList(list);
+    return true;
+  }
+  function applyTeamList(list) {
+    if (modalMode || !teamIsLive()) {
+      draftExtras = list;
+    } else {
+      state.extras = list;
+      syncExtraTasks();
+      renderAll();
+      saveSession();
+    }
+    renderTeamUI();
+  }
+  function toggleToolInTeam(id) {
+    const t = toolById(id);
+    if (!t || !t.injectable) return false;
+    const on = teamList().some((e) => e.id === t.id);
+    if (on) {
+      removeTeamAgent(t.id);
+      showToast(t.name + josa(t.name, '을') + ' 팀에서 뺐습니다');
+      return false;
+    }
+    if (!modalMode && teamIsLive() && state.cursor >= 9) {
+      showToast('마무리 단계입니다 — ' + t.name + josa(t.name, '은') + ' 다음 과제부터 투입할 수 있습니다');
+      return false;
+    }
+    addTeamAgent(t.id);
+    showToast(t.name + ' 투입 완료 — 역할은 ' + roleLabelOf(t.role) + ' (바꿀 수 있습니다)');
+    return true;
+  }
+  function onTeamChange(e) {
+    const t = e.target;
+    if (!t || !t.matches) return;
+    if (t.matches('[data-team-pick]')) {
+      const id = t.getAttribute('data-team-pick');
+      if (t.checked) toggleToolInTeam(id);
+      else toggleToolInTeam(id);
+      return;
+    }
+    if (t.matches('[data-team-role]')) {
+      const id = t.getAttribute('data-team-role');
+      setTeamRole(id, t.value, '');
+      const inp = document.querySelector('#teamRows [data-team-custom="' + id + '"]') || document.querySelector('#guideTeam [data-team-custom="' + id + '"]');
+      if (inp) inp.focus();
+      return;
+    }
+    if (t.matches('[data-team-custom]')) {
+      setTeamRole(t.getAttribute('data-team-custom'), 'custom', t.value);
+    }
+  }
+  function onTeamClick(e) {
+    const b = e.target.closest ? e.target.closest('[data-team-remove]') : null;
+    if (!b) return;
+    const id = b.getAttribute('data-team-remove');
+    const t = toolById(id);
+    removeTeamAgent(id);
+    if (t) showToast(t.name + josa(t.name, '을') + ' 팀에서 뺐습니다');
+  }
+  function teamSummary() {
+    return teamAgents().map((a) => ({
+      id: a.id, name: a.name, role: a.roleKo, fixed: !!a.fixed,
+      badge: a.tool ? a.tool.badge : (a.id === 'pickle' ? 'Lead' : '기본 멤버'),
+      limit: a.tool ? (a.tool.limit || a.tool.badge) : ''
+    }));
+  }
 
   function taskDefs(p) {
     return [
@@ -849,8 +1031,282 @@
     });
   }
 
-  function measureMethod(kpi, p, i) {
-    if (/율|비율|률|전환/.test(kpi)) return '같은 조건의 ' + (i === 0 ? '첫 10건' : '1주일') + ' 표본에서 성공 건수 ÷ 전체 건수';
+  /* ─────── 4-2. 투입 에이전트의 역할 발언 (고정 3인 뒤에 붙는다) ─────── */
+  function extraTaskId(def) {
+    const t = state.tasks.find((x) => x.extraFor === def.guideId);
+    return t ? t.id : null;
+  }
+
+  function extraTurnDef(def) {
+    const are = { stage: 0, agent: def.id, tag: def.roleKo, html: '', tasks: [], artifacts: [] };
+    return are;
+  }
+
+  function buildExtraTurn(def, stage, p) {
+    const role = roleById(def.roleId);
+    const stages = role && role.stages && role.stages.length ? role.stages : [2, 6];
+    const first = stage === stages[0];
+    const label = def.roleKo;
+    const limit = def.tool ? (def.tool.limit || def.tool.badge || '무료 범위') : '무료 범위';
+    const step0 = p.steps[0] || { name: '1단계', output: '첫 결과물' };
+    const step1 = p.steps[1] || step0;
+    const taskId = extraTaskId(def);
+    const taskOps = taskId ? [{ id: taskId, status: first ? 'in_progress' : 'done' }] : [];
+    const turn = extraTurnDef(def);
+    Object.assign(turn, { stage: stage, tasks: taskOps });
+    const head = '<p>저는 <b>' + esc(label) + '</b>' + josa(label, '을') + ' 맡았습니다. 한도는 <b>' + esc(limit) + '</b>입니다.</p>';
+    const who = p.audience || '사용자';
+    const out = [];
+    let html = '';
+
+    if (stage === 1) {
+      html = '<p><b>' + esc(label) + '</b>으로 합류했습니다. 한도 <b>' + esc(limit) + '</b> 안에서 <b>' + esc(step0.name) + '</b>부터 보고, 제 몫인 <b>' + esc(role ? role.output : label) + '</b>' + josa(role ? role.output : label, '을') + ' 넘기겠습니다.</p>';
+      turn.html = html;
+      return turn;
+    }
+
+    if (def.roleId === 'code') {
+      if (first) {
+        html = head +
+          '<p>"' + esc(p.title) + '"에서 <b>' + esc(step0.name) + '</b>' + josa(step0.name, '을') + ' PR 3개로 나누겠습니다.</p>' +
+          bullets([
+            '<b>PR 1</b> — ' + esc(step0.output) + ' 뼈대와 실행 확인',
+            '<b>PR 2</b> — 핵심 로직과 예외 처리 (' + esc(step1.name) + ' 준비)',
+            '<b>PR 3</b> — 테스트와 사용 설명'
+          ], 'num-list') +
+          '<p>PR은 하나에 300줄 아래, 브랜치는 PR 하나당 하나만 열어 두겠습니다. 한도 <b>' + esc(limit) + '</b> 안에서 움직이려고 하루 두 사이클로 나뒀습니다.</p>' +
+          '<div class="callout"><b>리뷰 규칙</b> @코덱스 품질 기준을 제가 먼저 셀프 체크하고, 통과한 PR만 넘깁니다. 막힌 건 바로 @피클에게 올립니다.</div>';
+        out.push({
+          title: 'PR 계획 (' + def.name + ')',
+          content: ['# PR 계획 — ' + p.title, '', '- 역할: ' + label + ' (' + def.name + ', 한도 ' + limit + ')', '- 목표: ' + p.goal, '', '## PR 3건',
+            '1. ' + step0.output + ' 뼈대와 실행 확인', '2. 핵심 로직과 예외 처리 (' + step1.name + ' 준비)', '3. 테스트와 사용 설명', '',
+            '## 완료 판단', '- ' + p.checks[0], '- PR 3건 모두 셀프 체크 후 제출'].join('\n')
+        });
+      } else {
+        const crit = p.critique[0] ? p.critique[0].t : '리스크 점검';
+        html = head +
+          '<p>수정 실행안을 코드로 옮길 순서를 확정했습니다. 코덱스가 지적한 <b>' + esc(crit) + '</b>' + josa(crit, '은') + ' 문서가 아니라 확인 절차로 막습니다.</p>' +
+          bullets([
+            '실행 환경 먼저 맞추기 — 의존성 설치부터 다시(오류가 나면 여기서 멈춤)',
+            '<b>' + esc(step0.name) + '</b> 변경을 PR 1로 올리고 실행 로그첨부',
+            '통과하면 PR 2·3을 연속해서 올리고, 실패한 검사는 고치지 않고 목록만 남기기'
+          ]) +
+          '<p>완료 조건은 <b>' + esc(p.checks[0]) + '</b>입니다. 이게 아니면 PR을 닫고 다시 엽니다.</p>' +
+          '<div class="callout"><b>지금 넘기는 것</b> PR 1건 + 실행 로그. 나머지 2건은 내일 첫 사이클에 올립니다.</div>';
+      }
+    } else if (def.roleId === 'ide') {
+      if (first) {
+        html = head +
+          '<p>저는 편집기와 터미널에서 실제로 돌려 보는 쪽을 맡습니다. 수정 실행안을 명령 순서로 바꿔 오늘 한 사이클 돌려 보겠습니다.</p>' +
+          bullets([
+            '① 저장소를 받아 의존성 설치 — 여기서 실패하면 다른 건 보지 않고 멈춥니다',
+            '② 개발 모드로 실행해 <b>' + esc(step0.name) + '</b> 결과물이 화면에 뜨는지 확인',
+            '③ 빌드·검사 명령을 한 번 돌리고, 오류는 1건씩만 고쳐 다시 실행',
+            '④ 실행 로그를 남겨 밖는 사람도 같은 결론을 내릴 수 있게 정리'
+          ], 'num-list') +
+          '<p>무료 한도가 <b>' + esc(limit) + '</b>라 빌드는 사이클당 한 번만 돌립니다. 여러 번 돌리면 한도가 먼저 떨어집니다.</p>' +
+          '<div class="callout"><b>넘길 것</b> 실행 로그와 오류 1건. 고치지 못한 오류는 그대로 적어 @코덱스 판단을 받습니다.</div>';
+        out.push({
+          title: '실행 명령 순서표 (' + def.name + ')',
+          content: ['# 실행 명령 순서표 — ' + p.title, '', '- 담당: ' + def.name + ' (' + label + ', ' + limit + ')', '', '## 사이클', '1. 의존성 설치', '2. 개발 모드 실행 — ' + step0.output + ' 확인',
+            '3. 빌드·검사 1회', '4. 오류 1건 수정 후 재실행', '', '## 완료 판단', '- ' + p.checks[0]].join('\n')
+        });
+      } else {
+        html = head +
+          '<p>첫 3일 실행표를 명령 단위로 바꿨습니다. 하루에 한 사이클씩만 돌려서 한도 안에서 끝냅니다.</p>' +
+          bullets([
+            '<b>1일차</b> — 설치 → 실행 → <b>' + esc(step0.name) + '</b> 화면 확인',
+            '<b>2일차</b> — ' + esc(step1.name) + ' 수정 1건, 빌드 로그 첨부',
+            '<b>3일차</b> — ' + esc((p.steps[2] || step1).name) + ' 점검, 남은 오류 목록만 남기고 마감'
+          ], 'num-list') +
+          '<div class="callout"><b>주의</b> 실행이 두 번 연속 같은 곳에서 막히면 코드를 더 고치지 말고 범위를 줄입니다. 그 판단은 @피클 몫입니다.</div>';
+      }
+    } else if (def.roleId === 'browser') {
+      if (first) {
+        html = head +
+          '<p>계획을 화면으로 확인하겠습니다. ' + esc(who) + ' 입장에서 실제로 보게 될 장면을 시나리오 3개로 줄였습니다.</p>' +
+          bullets([
+            '처음 열었을 때 — 첫 화면에서 무엇을 먼저 보는가',
+            '핵심 행동 1회 — ' + esc(p.deliverable) + '가 실제로 되어 있는가',
+            '실패했을 때 — 오류 문구가 다음 행동을 알려 주는가'
+          ], 'num-list') +
+          '<p>로그인·결제처럼 되돌리기 어려운 동작은 제가 누르지 않고, 어느 화면에서 멈추는지만 기록합니다.</p>' +
+          '<div class="callout"><b>판정</b> 세 시나리오 중 둘 이상 막히면 계획이 아니라 화면을 먼저 고쳐야 합니다.</div>';
+        out.push({
+          title: '브라우저 검증 시나리오 (' + def.name + ')',
+          content: ['# 브라우저 검증 시나리오 — ' + p.title, '', '- 검증자: ' + def.name + ' (' + label + ')', '- 대상 사용자: ' + who, '', '## 3개 시나리오',
+            '1. 첫 화면: 첫 5초에 무엇을 보는가', '2. 핵심 행동 1회: ' + p.deliverable + '가 완성되는가', '3. 실패 화면: 오류 문구가 다음 행동을 알려 주는가', '',
+            '## 기록 규칙', '- 로그인·결제·삭제는 직접 누르지 않고 차단 지점만 기록', '- 스크릿샷 1장 + 재현 절차 한 줄'].join('\n')
+        });
+      } else {
+        html = head +
+          '<p>품질 게이트를 화면 기록으로 바꿀겠습니다. 숫자만 보면 놓치는 것이 있어서, 장면을 함께 남깁니다.</p>' +
+          bullets([
+            '<b>' + esc(p.kpis[0]) + '</b>' + josa(p.kpis[0], '은') + ' 핵심 화면 도달까지 걸린 횟수로 기록',
+            '성공·실패 장면을 같은 조건에서 3번 반복해 재현성 확인',
+            '실패 장면은 스크릿샷과 함께 어느 단계에서 멈췄는지 한 줄로 남김'
+          ]) +
+          '<div class="callout"><b>주의</b> 같은 화면이 두 번 다르게 동작하면 그건 측정 문제가 아니라 버그입니다. 그때는 계획을 늘리지 말고 범위를 줄입니다.</div>';
+      }
+    } else if (def.roleId === 'local') {
+      if (first) {
+        html = head +
+          '<p>제 일은 발행이 아니라 <b>초안</b>입니다. 내 PC에서 돌리는 모델이라 API 비용 없이 여러 초안을 시도할 수 있습니다.</p>' +
+          bullets([
+            '초안 1 — ' + esc(p.keywords.slice(0, 2).join('·') || '핵심 주제') + '를 한 문장으로 정리',
+            '초안 2 — 독자가 바로 할 수 있는 행동 3개',
+            '초안 3 — 반대로 하면 어떻게 되는지(반례)'
+          ], 'num-list') +
+          '<p>세 초안 중 제가 고른 한 개가 지금 단계의 재료가 됩니다. 메모리는 16GB 한도로 줄이고, 긴 글은 두 번에 나눠 씁니다.</p>' +
+          '<div class="callout"><b>전제</b> 로컬 모델 초안은 검토 없이 그대로 쓰지 않습니다. 사실 확인은 @코덱스 기준을 따릅니다.</div>';
+        out.push({
+          title: '로컬 모델 초안 (' + def.name + ')',
+          content: ['# 로컬 모델 초안 — ' + p.title, '', '- 작성: ' + def.name + ' (' + label + ', ' + limit + ')', '', '## 초안 1 (요약)', p.goal, '', '## 초안 2 (행동 3개)',
+            '- ' + p.checks[0], '- ' + (p.checks[1] || p.checks[0]), '- ' + (p.checks[2] || p.checks[0]), '', '## 초안 3 (반례)',
+            '- ' + (p.risks[0] ? p.risks[0].r : '범위를 넓히면 일정이 먼저 무너진다')].join('\n')
+        });
+      } else {
+        html = head +
+          '<p>초안 3편을 비교해서 1편만 남겼습니다. 남긴 기준은 문장 길이와 행동문 개수입니다.</p>' +
+          '<p>산출물 패널의 <b>로컬 모델 초안</b>을 실행 브리프에 붙일 수 있게 정리해 올렸습니다. 문장 다듬기는 @제미나이 태스크가, 사실 확인은 @코덱스가 마저 봐 주세요.</p>' +
+          '<div class="callout"><b>한도</b> 로컬 모델은 무료지만 느립니다. 마감이 급하면 초안을 1편으로 줄이고 품질을 먼저 봅니다.</div>';
+      }
+    } else if (def.roleId === 'research') {
+      if (first) {
+        html = head +
+          '<p>무료 조건을 같은 기준으로 비교했습니다. 기간과 제공 범위가 서로 달라서, 그대로 견주면 잘못 고릅니다.</p>' +
+          bullets([
+            p.research[0] ? esc(p.research[0]) : '도구별 무료 한도와 과금 시작점 확인',
+            p.research[1] ? esc(p.research[1]) : '같은 작업을 할 때 실제 소요 시간 비교',
+            '무료 한도를 다 썼을 때의 대안(대기·다른 도구)까지 함께 적기'
+          ], 'num-list') +
+          '<p>비교표는 오른쪽 산출물에 올렸습니다. 제 판단은 <b>' + esc(p.plan === 'A' ? 'A안' : 'B안') + '</b> 쪽입니다.</p>' +
+          '<div class="callout"><b>기준</b> 가격이 0원이어도 대기 시간이 길면 비용입니다. 시간을 숫자로 바꿔 비교했습니다.</div>';
+        out.push({
+          title: '무료 조건 비교표 (' + def.name + ')',
+          content: ['# 무료 조건 비교표 — ' + p.title, '', '| 항목 | 무료 범위 | 과금 시작점 | 확인 방법 |', '|---|---|---|---|',
+            '| ' + (p.research[0] || '도구 A') + ' | 무료 한도 확인 필요 | 한도 소진 후 | 공식 가격 페이지 |',
+            '| ' + (p.research[1] || '도구 B') + ' | 체험·무료 터어 | 체험 종료 후 | 공식 문서 |',
+            '| 대안 | 직접 실행(로컬) | 없음 | 실행 로그 |', '', '## 결론', '- ' + p.kpis[0] + ' 기준으로 가장 유리한 조합 1개 선택'].join('\n')
+        });
+      } else {
+        html = head +
+          '<p>비교표를 지표에 연결해 두었습니다. 무료 범위가 달라도 측정 기준만 같으면 결과를 견줄 수 있습니다.</p>' +
+          '<p>이번 판에서 도구를 바꾸는 일은 없습니다. 바꾸려면 최소 1주치 표본이 필요해서, 지금 바꾸면 판정이 불가능합니다.</p>' +
+          '<div class="callout"><b>확인 필요</b> 무료 정책은 서비스가 수시로 바뀝니다. 판정 일주일 전에 제가 다시 확인해 비교표를 갱슬합니다.</div>';
+      }
+    } else if (def.roleId === 'spec') {
+      if (first) {
+        html = head +
+          '<p>말로 정한 약속은 실행할 때 흔들리므로, 스펙 세 장으로 고정하겠습니다.</p>' +
+          bullets([
+            '<b>범위</b> — 이번 판에 끝내는 것: ' + esc(p.deliverable) + ', 이번 판에서 빠지는 것: ' + esc(p.steps[3].name),
+            '<b>인터페이스</b> — 누가 무엇을 넣고 무엇을 돌려받는지 (화면·파일·메시지)',
+            '<b>완료 조건</b> — ' + esc(p.checks[0])
+          ], 'num-list') +
+          '<p>크레딧 <b>' + esc(limit) + '</b> 안에서 세 장을 모두 끝내려고 표와 목록만 쓰고 줄글은 빼겠습니다.</p>' +
+          '<div class="callout"><b>규칙</b> 스펙에 없는 요구가 들어오면 이번 판에서는 받지 않고 다음 판으로 넘깁니다.</div>';
+        out.push({
+          title: '스펙 문서 3장 (' + def.name + ')',
+          content: ['# 스펙 문서 — ' + p.title, '', '## 1. 범위', '- 포함: ' + p.deliverable, '- 제외: ' + p.steps[3].name + ', ' + p.steps[4].name, '', '## 2. 인터페이스',
+            '- 입력: ' + (p.constraints[0] ? p.constraints[0].label : '사용자 요청'), '- 처리: ' + p.steps[0].name + ' → ' + p.steps[1].name, '- 출력: ' + p.deliverable, '', '## 3. 완료 조건', '- ' + p.checks[0], '- ' + p.kpis[0]].join('\n')
+        });
+      } else {
+        html = head +
+          '<p>완료 조건을 스펙에 숫자로 박아 두었습니다. ' + esc(p.kpis[0]) + '를 측정할 수 없으면 완료가 아니라 보류로 표시합니다.</p>' +
+          '<p>스펙에 없는 요구가 들어오면 다음 판 목록에 넣고 이번 판은 그대로 끝냅니다.</p>' +
+          '<div class="callout"><b>남은 구멍</b> 인터페이스는 글로만 고정되어 있어서, 실제 화면이 다르면 다시 맞춰야 합니다. @Perplexity Comet 검증 결과를 기다립니다.</div>';
+      }
+    } else if (def.roleId === 'docs') {
+      if (first) {
+        html = head +
+          '<p>결과물 문서 구조를 잡았습니다. 읽는 사람은 ' + esc(who) + ' 한 명이라고 보고, 첫 화면에서 필요한 것만 위에 올렸습니다.</p>' +
+          bullets([
+            '<b>요약 1장</b> — 무엇을, 왜, 언제까지 (' + esc(p.deadline ? p.deadline.label : '2주') + ')',
+            '<b>실행 문서</b> — ' + esc(p.deliverable) + '와 체크리스트',
+            '<b>변경 기록</b> — 이번 판에서 뺀 것과 이유'
+          ], 'num-list') +
+          '<p>문서는 늘리는 대신 합치는 방향으로 다듬겠습니다. 같은 내용이 두 문서에 있으면 하나를 지웁니다.</p>' +
+          '<div class="callout"><b>기준</b> 처음 보는 사람이 3분 안에 첫 행동을 찾을 수 있으면 통과입니다.</div>';
+        out.push({
+          title: '문서 목차 (' + def.name + ')',
+          content: ['# 문서 목차 — ' + p.title, '', '1. 요약 (목표 · 기간 · 대상)', '2. 실행 문서 (' + p.deliverable + ')', '3. 체크리스트', '4. 변경 기록', '',
+            '## 요약 초안', '- 목표: ' + p.goal, '- 기간: ' + (p.deadline ? p.deadline.label : '2주'), '- 대상: ' + who].join('\n')
+        });
+      } else {
+        html = head +
+          '<p>첫 3일 실행표 문장을 다듬었습니다. 긴 문장은 명령형 한 줄로 바꾸고, 완료 판단은 눈으로 확인할 수 있는 말로 고쳤습니다.</p>' +
+          '<p>문서에서 빠진 항목은 <b>' + esc(p.checks[p.checks.length - 1] || p.checks[0]) + '</b> 하나입니다. 이건 화면 검증 결과가 나온 뒤에 넣겠습니다.</p>' +
+          '<div class="callout"><b>넘길 것</b> 정리된 요약 1장. 실행 문서는 @제미나이 태스크 문장을 그대로 쓰고 새로 쓰지 않았습니다.</div>';
+      }
+    } else if (def.roleId === 'qa') {
+      if (first) {
+        html = head +
+          '<p>재현 절차부터 만들었습니다. 같은 문제가 두 번 나오면 테스트가 없어서 그렇습니다.</p>' +
+          bullets([
+            '<b>재현</b> — 같은 조건에서 3번 반복해 2번 이상 나오면 버그로 등록',
+            '<b>회귀</b> — ' + esc(p.checks[0]) + ' 포함 12건 체크',
+            '<b>종료 조건</b> — 새 오류 0건이 아니라, 알려진 오류 목록이 문서와 같은 상태'
+          ], 'num-list') +
+          '<p>12건 중 9건은 이미 자동으로 돌릴 수 있습니다. 나머지 3건은 화면 확인이 필요해서 @Perplexity Comet 쪽에 넘길 수 있습니다.</p>' +
+          '<div class="callout"><b>주의</b> 테스트를 통과해도 기획 의도와 다르면 버그입니다. 마지막 판정은 사람이 합니다.</div>';
+        out.push({
+          title: '회귀 체크 12건 (' + def.name + ')',
+          content: ['# 회귀 체크 12건 — ' + p.title, '', '| 번호 | 확인 항목 | 방법 | 판정 |', '|---|---|---|---|',
+            '| 1 | ' + p.checks[0] + ' | 직접 확인 | 대기 |', '| 2 | ' + (p.checks[1] || '핵심 화면 도달') + ' | 반복 실행 | 대기 |',
+            '| 3 | 오류 문구 | 화면 확인 | 대기 |', '| 4~12 | 예외 입력·재시도·모바일 화면 | 자동 + 화면 | 대기 |', '', '## 종료 조건', '- 알려진 오류 목록과 문서가 같은 상태'].join('\n')
+        });
+      } else {
+        html = head +
+          '<p>최종 검증에서 12건을 다시 돌렸습니다. 새 오류는 없고, 알려진 오류 1건은 문서와 같은 상태입니다.</p>' +
+          '<p>지표 <b>' + esc(p.kpis[0]) + '</b>' + josa(p.kpis[0], '은') + ' 기준선을 막 넘었습니다. 실패 기준을 넘나드는 상태라 다음 주 한 번 더 봐야 합니다.</p>' +
+          '<div class="callout"><b>판정</b> 이번 판은 조건부 통과입니다. 다음 판 첫 작업은 이 한 건의 재현 절차 다시 만들기입니다.</div>';
+      }
+    } else {
+      if (first) {
+        html = head +
+          '<p>' + esc(label) + ' 관점에서 이번 과제를 보면, 결론을 내리기 전에 <b>' + esc(step0.name) + '</b>의 결과를 한 번 보고 싶습니다.</p>' +
+          '<p>제가 보탬 수 있는 부분은 ' + esc(role ? role.output : '역할 산출물') + '입니다. 넘길 때는 확인할 수 있는 형태(문서·목록·기록)로 넘기겠습니다.</p>' +
+          '<div class="callout"><b>요청</b> 제 역할 범위를 넘는 결정(예산·일정 변경)은 제가 하지 않고 @피클에게 넘깁니다.</div>';
+      } else {
+        html = head +
+          '<p>맡은 부분을 마쳤습니다. 결과는 산출물 패널에 정리했고, 완료 조건은 <b>' + esc(p.checks[0]) + '</b>로 확인했습니다.</p>' +
+          '<div class="callout"><b>남긴 것</b> 다음 판에서 다시 볼 항목 1개 — ' + esc(p.risks[0] ? p.risks[0].r : '일정 지연') + '.</div>';
+      }
+    }
+
+    turn.html = html;
+    turn.artifacts = out;
+    return turn;
+  }
+
+  function extraTurnsFor(stage, p) {
+    const list = extrasOf(state.extras);
+    const out = [];
+    list.forEach((def) => {
+      const role = roleById(def.roleId);
+      const stages = role && role.stages && role.stages.length ? role.stages : [2, 6];
+      if (stage === 1) { out.push(buildExtraTurn(def, 1, p)); return; }
+      if (stages.indexOf(stage) >= 0) { out.push(buildExtraTurn(def, stage, p)); return; }
+      /* 늦게 합류해 자기 단계를 놓친 에이전트 — 마지막 검증 단계에서 한 번은 말한다 */
+      if (stage === 9 && !state.messages.some((m) => m.agent === def.id)) {
+        const t = buildExtraTurn(def, 9, p);
+        t.html = '<p>합류가 늦어 제 단계를 건너뛰었습니다. <b>' + esc(def.roleKo) + '</b> 관점에서 마지막에 한 번만 짚겠습니다 — <b>' + esc(p.kpis[0]) + '</b> 기준과 <b>' + esc(p.checks[0]) + '</b> 확인은 제가 맡겠습니다.</p>' +
+          '<div class="callout"><b>한도</b> ' + esc(def.tool ? (def.tool.limit || def.tool.badge || '무료 범위') : '무료 범위') + ' 안에서 이번 판은 여기까지만 합니다.</div>';
+        t.tasks = extraTaskId(def) ? [{ id: extraTaskId(def), status: 'done' }] : [];
+        t.artifacts = [];
+        out.push(t);
+      }
+    });
+    return out;
+  }
+
+  function turnsForStage(stage, p, fresh) {
+    const list = [buildTurn(stage, p, fresh)];
+    return list.concat(extraTurnsFor(stage, p));
+  }
+
+  function measureMethod(kpi, p, i) {    if (/율|비율|률|전환/.test(kpi)) return '같은 조건의 ' + (i === 0 ? '첫 10건' : '1주일') + ' 표본에서 성공 건수 ÷ 전체 건수';
     if (/시간/.test(kpi)) return '시작 시각과 끝 시각을 3회 기록해 중앙값 사용';
     if (/수|건수|개수/.test(kpi)) return '주 1회 같은 요일에 세어 추이만 비교';
     if (/비용/.test(kpi)) return '실제 결제·청구 금액을 합산(추정 금액 제외)';
@@ -875,11 +1331,27 @@
   }
 
   /* ─────────────────────── 5. 결과물 생성 ─────────────────────── */
+  function teamReport() {
+    return teamAgents().map((a) => {
+      const role = roleById(a.roleId);
+      const arts = state.artifacts.filter((x) => x.agent === a.name).map((x) => x.title);
+      return {
+        name: a.name, role: a.roleKo, fixed: !!a.fixed,
+        badge: a.tool ? a.tool.badge : '기본 팀', limit: a.tool ? (a.tool.limit || '') : '',
+        spoke: state.messages.filter((m) => m.agent === a.id).length,
+        tasks: state.tasks.filter((t) => t.owner === a.name).map((t) => t.title),
+        artifacts: arts,
+        output: arts.length ? arts.join(', ') : (role ? role.output : a.roleKo + ' 산출물')
+      };
+    });
+  }
+
   function buildReportData(p) {
     const roadmap = p.steps.map((s) => ({ step: s.name, detail: s.detail.replace(/<[^>]+>/g, ''), owner: s.owner, when: s.when, output: s.output }));
     return {
       p,
       created: dateLabel(),
+      team: teamReport(),
       summary: {
         goal: p.goal,
         context: p.context || '별도 제약 없음',
@@ -934,11 +1406,19 @@
       .concat(['', '루틴: ' + routineAdvice(p)]).join('\n');
   }
 
+  function reportTeamLine(data) {
+    const team = data.team || [];
+    if (team.length <= 3) return '피클(Lead) · 제미나이 태스크 · 코덱스 3자 협업 결과물';
+    return '피클(Lead) · 제미나이 태스크 · 코덱스 + 가이드 에이전트 ' + (team.length - 3) + '명이 역할을 나눠 협업한 결과물';
+  }
+
   function reportMarkdown(data) {
     const p = data.p;
     const L = [];
+    const team = data.team || [];
+    const hasTeam = team.length > 3;
     L.push('# ' + p.title, '');
-    L.push('> 피클(Lead) · 제미나이 태스크 · 코덱스 3자 협업 결과물  ');
+    L.push('> ' + reportTeamLine(data) + '  ');
     L.push('> ' + data.created + ' · ' + p.domainLabel + ' / ' + p.intentLabel + ' · 대상: ' + p.audience, '');
     L.push('## 1. 과제 요약', '');
     L.push('- **목표**: ' + data.summary.goal);
@@ -962,20 +1442,32 @@
     L.push('|---|---|---|');
     data.gates.forEach((g) => L.push('| ' + mdCell(g.name) + ' | ' + mdCell(g.method) + ' | ' + mdCell(g.fail) + ' |'));
     L.push('', '- 품질 기준: ' + p.quality.join(' / '));
+    let sec = 5;
+    if (hasTeam) {
+      sec++;
+      L.push('', '## ' + sec + '. 참여 에이전트별 역할·산출물', '');
+      L.push('| 에이전트 | 역할 | 발언 | 산출물·맡은 일 |');
+      L.push('|---|---|---|---|');
+      team.forEach((t) => L.push('| ' + mdCell(t.name) + (t.fixed ? '' : ' (투입)') + ' | ' + mdCell(t.role) + ' | ' + t.spoke + ' | ' + mdCell(t.output) + ' |'));
+    }
     if (data.feedback.length) {
-      L.push('', '## 6. 사용자 개입 반영', '');
+      sec++;
+      L.push('', '## ' + sec + '. 사용자 개입 반영', '');
       data.feedback.forEach((f) => L.push('- "' + f.text + '" → ' + f.effect));
     }
-    L.push('', '## ' + (data.feedback.length ? 7 : 6) + '. 다음 단계', '');
+    sec++;
+    L.push('', '## ' + sec + '. 다음 단계', '');
     data.next.forEach((n, i) => L.push((i + 1) + '. ' + n));
     L.push('', '---', '');
-    L.push('_Agent Collab Studio에서 피클 · 제미나이 태스크 · 코덱스 협업으로 생성됨._');
+    L.push('_Agent Collab Studio에서 ' + (hasTeam ? '피클 · 제미나이 태스크 · 코덱스 + 가이드 에이전트 ' + (team.length - 3) + '명' : '피클 · 제미나이 태스크 · 코덱스') + ' 협업으로 생성됨._');
     return L.join('\n');
   }
   function mdCell(s) { return String(s == null ? '' : s).replace(/\|/g, '\\|').replace(/\n/g, ' '); }
 
   function reportHtml(data) {
     const p = data.p;
+    const team = data.team || [];
+    const hasTeam = team.length > 3;
     const section = (n, title, body) => '<h2><span class="n">' + n + '</span>' + esc(title) + '</h2>' + body;
     let h = '<h1>' + esc(p.title) + '</h1>' +
       '<p class="rsub">' + data.created + ' · ' + esc(p.domainLabel) + ' / ' + esc(p.intentLabel) + ' · 대상 ' + esc(p.audience) + '</p>' +
@@ -1001,10 +1493,20 @@
         data.gates.map((g) => '<tr><td><b>' + esc(g.name) + '</b></td><td>' + esc(g.method) + '</td><td>' + esc(g.fail) + '</td></tr>').join('') +
         '</tbody></table></div>' +
         '<p><b>품질 기준</b> ' + p.quality.map((q) => esc(q)).join(' · ') + '</p>');
-    if (data.feedback.length) {
-      h += section('06', '사용자 개입 반영', '<ul>' + data.feedback.map((f) => '<li>"' + esc(f.text) + '" → ' + esc(f.effect) + '</li>').join('') + '</ul>');
+    let sec = 5;
+    if (hasTeam) {
+      sec++;
+      h += section('0' + sec, '참여 에이전트별 역할·산출물',
+        '<div class="table-wrap"><table class="report-table"><thead><tr><th>에이전트</th><th>역할</th><th>발언</th><th>산출물·맡은 일</th></tr></thead><tbody>' +
+        team.map((t) => '<tr><td><b>' + esc(t.name) + '</b>' + (t.fixed ? '' : '<br><span class="tg">가이드 투입 · ' + esc(t.badge) + '</span>') + '</td><td>' + esc(t.role) + '</td><td>' + t.spoke + '</td><td>' + esc(t.output) + '</td></tr>').join('') +
+        '</tbody></table></div><p class="rsub">고정 3인 외에 무료 에이전트 가이드에서 투입한 에이전트가 부여된 역할대로 발언·태스크·산출물을 맡았습니다.</p>');
     }
-    h += section(data.feedback.length ? '07' : '06', '다음 단계', '<ol>' + data.next.map((n) => '<li>' + esc(n) + '</li>').join('') + '</ol>');
+    if (data.feedback.length) {
+      sec++;
+      h += section('0' + sec, '사용자 개입 반영', '<ul>' + data.feedback.map((f) => '<li>"' + esc(f.text) + '" → ' + esc(f.effect) + '</li>').join('') + '</ul>');
+    }
+    sec++;
+    h += section('0' + sec, '다음 단계', '<ol>' + data.next.map((n) => '<li>' + esc(n) + '</li>').join('') + '</ol>');
     return h;
   }
 
@@ -1063,11 +1565,14 @@
     focus: false,
     typingAgent: null,
     runId: null,
-    createdAt: null
+    createdAt: null,
+    extras: []
   };
   let autoTimer = null;
   let typingTimer = null;
   let pendingFresh = null;
+  let stageQueue = [];
+  let stageFresh = null;
 
   function publicState() {
     return {
@@ -1080,6 +1585,7 @@
       artifacts: state.artifacts.map((a) => a.title),
       feedback: state.feedback.map((f) => f.text),
       hasReport: !!state.report,
+      team: teamSummary(),
       profile: state.profile ? {
         domain: state.profile.domain,
         intent: state.profile.intent,
@@ -1104,7 +1610,8 @@
       cursor: state.cursor,
       feedback: state.feedback,
       report: state.report,
-      completed: state.completed
+      completed: state.completed,
+      extras: state.extras
     };
     let clone;
     try { clone = JSON.parse(JSON.stringify(data)); } catch (e) { return data; }
@@ -1152,6 +1659,8 @@
     state.feedback = data.feedback || [];
     state.report = data.report || null;
     state.completed = !!data.completed;
+    state.extras = (data.extras || []).filter((e) => { const t = toolById(e.id); return t && t.injectable; });
+    stageQueue = [];
     state.runId = data.id || ('run-' + Date.now());
     state.createdAt = data.createdAt || Date.now();
     state.profile.feedbackLog = state.feedback.map((f) => ({ text: f.text, effect: f.effect || '' }));
@@ -1208,30 +1717,42 @@
   function renderAgents() {
     const wrap = $('#agentList');
     if (!wrap) return;
-    wrap.innerHTML = AGENTS.map((a) => {
+    const team = teamAgents();
+    const hint = $('#agentCountHint');
+    if (hint) hint.textContent = team.length + '명';
+    const badge = $('#brandBadge');
+    if (badge) badge.textContent = team.length + '-에이전트 협업';
+    wrap.innerHTML = team.map((a) => {
       const msgs = state.messages.filter((m) => m.agent === a.id).length;
       const doneTasks = state.tasks.filter((t) => t.owner === a.name && t.status === 'done').length;
       const current = state.typingAgent === a.id;
       const status = current ? '작성 중' : state.profile ? (state.completed ? '완료' : '대기') : '대기';
       const pct = contributionPct(a);
-      return '<div class="agent' + (current ? ' is-active' : '') + '" style="' + agentVars(a) + '">' +
+      return '<div class="agent' + (current ? ' is-active' : '') + (a.fixed ? '' : ' is-extra') + '" style="' + agentVars(a) + '" data-agent="' + esc(a.id) + '">' +
         '<div class="agent-top">' +
         '<div class="avatar">' + esc(a.initial) + '</div>' +
         '<div class="agent-id"><div class="agent-name">' + esc(a.name) + '<span class="role-pill">' + esc(a.roleKo) + '</span></div>' +
-        '<div class="agent-sub">' + esc(a.sub) + '</div></div></div>' +
+        '<div class="agent-sub">' + esc(a.sub) + '</div>' +
+        (a.fixed ? '' : '<span class="agent-badge">' + esc(a.tool ? a.tool.badge : '가이드 투입') + '</span>') +
+        '</div></div>' +
         '<div class="agent-foot"><span class="agent-status"><i class="dotl ' + (current ? 'work' : state.profile && state.cursor > 0 ? 'on' : '') + '"></i>' + status + '</span>' +
         '<span class="agent-count">발언 ' + msgs + ' · 기여 ' + pct + '%</span></div>' +
         '</div>';
     }).join('');
+    const proto = $('#protocolExtra');
+    if (proto) {
+      const extras = team.filter((a) => !a.fixed);
+      proto.hidden = !extras.length;
+      if (extras.length) proto.innerHTML = extras.map((a) => '<li><b>' + esc(a.name) + '</b> ' + esc(a.roleKo)).join('');
+    }
   }
 
   function contributionPct(a) {
     const total = state.messages.length || 0;
     if (!total) return 0;
-    const msgs = state.messages.filter((m) => m.agent === a.id).length;
-    const done = state.tasks.filter((t) => t.owner === a.name && t.status === 'done').length;
-    const score = msgs + done * 1.5;
-    const all = AGENTS.reduce((sum, x) => sum + state.messages.filter((m) => m.agent === x.id).length + state.tasks.filter((t) => t.owner === x.name && t.status === 'done').length * 1.5, 0) || 1;
+    const team = teamAgents();
+    const score = state.messages.filter((m) => m.agent === a.id).length + state.tasks.filter((t) => t.owner === a.name && t.status === 'done').length * 1.5;
+    const all = team.reduce((sum, x) => sum + state.messages.filter((m) => m.agent === x.id).length + state.tasks.filter((t) => t.owner === x.name && t.status === 'done').length * 1.5, 0) || 1;
     return Math.round((score / all) * 100);
   }
 
@@ -1265,7 +1786,7 @@
         '<div class="msg-body"><div class="msg-meta"><span class="msg-name">나</span><span class="msg-tag">지시</span><span class="msg-time">' + esc(m.time) + '</span></div>' +
         '<div class="bubble">' + m.html + '</div></div></div>';
     }
-    const a = agentById(m.agent) || AGENTS[0];
+    const a = agentById(m.agent) || CORE_AGENTS[0];
     const taskOps = (m.tasks || []).map((t) => {
       const task = state.tasks.find((x) => x.id === t.id);
       const label = t.status === 'done' ? '완료' : t.status === 'in_progress' ? '진행 중' : t.status === 'review' ? '검토' : '대기';
@@ -1313,11 +1834,11 @@
     $('#mtabTaskCount').textContent = String(total);
     const labels = { todo: '대기', in_progress: '진행 중', review: '검토 중', done: '완료' };
     list.innerHTML = total ? state.tasks.map((t) => {
-      const owner = AGENTS.find((a) => a.name === t.owner);
+      const owner = agentByName(t.owner);
       return '<div class="task" data-status="' + t.status + '" style="' + (owner ? agentVars(owner) : '') + '">' +
         '<div class="task-top"><span class="task-id">' + esc(t.id) + '</span><span class="pill ' + t.status + '">' + labels[t.status] + '</span></div>' +
         '<p class="task-title">' + esc(t.title) + '</p>' +
-        '<div class="task-foot"><span class="task-owner"><i></i>' + esc(t.owner) + '</span><span class="task-meta">가중치 ' + t.weight + '</span></div>' +
+        '<div class="task-foot"><span class="task-owner"><i></i>' + esc(t.owner) + '</span><span class="task-meta">' + (t.extraFor ? '역할 · ' + esc(t.roleLabel || '투입') : '가중치 ' + t.weight) + '</span></div>' +
         '</div>';
     }).join('') : '<p class="empty-note">태스크 보드가 비어 있습니다.<br>새 과제를 시작하면 6개 태스크가 자동 생성됩니다.</p>';
   }
@@ -1337,8 +1858,9 @@
     const done = state.tasks.filter((t) => t.status === 'done').length;
     $('#metricMsgs').textContent = String(total);
     $('#metricTasks').textContent = done + ' / ' + state.tasks.length;
-    const all = AGENTS.reduce((s, a) => s + state.messages.filter((m) => m.agent === a.id).length + state.tasks.filter((t) => t.owner === a.name && t.status === 'done').length * 1.5, 0) || 1;
-    $('#metricBars').innerHTML = AGENTS.map((a) => {
+    const team = teamAgents();
+    const all = team.reduce((s, a) => s + state.messages.filter((m) => m.agent === a.id).length + state.tasks.filter((t) => t.owner === a.name && t.status === 'done').length * 1.5, 0) || 1;
+    $('#metricBars').innerHTML = team.map((a) => {
       const msgs = state.messages.filter((m) => m.agent === a.id).length;
       const tk = state.tasks.filter((t) => t.owner === a.name && t.status === 'done').length;
       const pct = Math.round(((msgs + tk * 1.5) / all) * 100);
@@ -1389,13 +1911,16 @@
     const p = analyzeMission(input);
     p.feedbackLog = [];
     state.profile = p;
+    state.extras = draftExtras.map((e) => Object.assign({}, e));
     state.tasks = taskDefs(p);
+    syncExtraTasks();
     state.messages = [];
     state.artifacts = [];
     state.cursor = 0;
     state.feedback = [];
     state.report = null;
     state.completed = false;
+    stageQueue = [];
     state.runId = 'run-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 6);
     state.createdAt = Date.now();
     pendingFresh = null;
@@ -1442,16 +1967,23 @@
   function executeTurn(instant) {
     if (state.completed) return false;
     if (!state.profile) return false;
-    if (state.cursor >= TURN_TOTAL) return false;
+    if (!stageQueue.length) {
+      if (state.cursor >= TURN_TOTAL) return false;
+      const nextStage = state.cursor + 1;
+      stageFresh = pendingFresh;
+      stageQueue = turnsForStage(nextStage, state.profile, stageFresh);
+      pendingFresh = null;
+    }
     const stage = state.cursor + 1;
-    const fresh = pendingFresh;
-    const turn = buildTurn(stage, state.profile, fresh);
-    pendingFresh = null;
+    const fresh = stageFresh;
+    const turn = stageQueue.shift();
+    const lastOfStage = !stageQueue.length;
+    if (lastOfStage) stageFresh = null;
 
     const apply = () => {
       state.busy = false;
       addMessage(turn, fresh);
-      state.cursor = stage;
+      if (lastOfStage) state.cursor = stage;
       renderAll();
       saveSession();
       if (state.completed) {
@@ -1481,7 +2013,10 @@
   function runTurns(n, instant) {
     for (let i = 0; i < n; i++) {
       if (state.completed) break;
-      if (!executeTurn(instant)) break;
+      let guard = 0;
+      do {
+        if (!executeTurn(instant)) break;
+      } while (stageQueue.length && ++guard < 40);
     }
     return publicState();
   }
@@ -1505,7 +2040,7 @@
   }
 
   function showTyping(agentId) {
-    const a = agentById(agentId) || AGENTS[0];
+    const a = agentById(agentId) || CORE_AGENTS[0];
     state.typingAgent = a.id;
     const bar = $('#typingBar');
     const av = $('#typingAvatar');
@@ -1671,30 +2206,89 @@
     showToast('히스토리에서 삭제했습니다');
   }
 
-  /* ─────────────────────── 12. 새 과제 모달 ─────────────────────── */
-  const PRESETS = [
-    { title: '1인 개발자를 위한 주간 뉴스레터 자동화', goal: '3주 안에 수집·요약·발송을 자동화하고 구독자 50명에게 첫 호를 보낸다', context: '혼자 진행, 예산 0원, API 키 없이 무료 도구만, 평일 저녁 하루 1시간', note: '개발 · 자동화' },
-    { title: '네이버 블로그 30일 수익화 점검', goal: '30일 안에 글 12편을 발행하고 검색 유입 1일 200명, 애드포스트 승인 조건을 채운다', context: '하루 1시간, 예산 0원, 생활 금융 주제, 초보 독자 대상', note: '콘텐츠 · 마케팅' },
-    { title: '이직 준비 3개월 포트폴리오 로드맵', goal: '12주 안에 포트폴리오 3개 프로젝트를 정리하고 지원 20건, 면접 3회를 만든다', context: '직장인, 평일 저녁 2시간·주말 4시간, 예산 10만원 이내', note: '커리어' },
-    { title: '주말 러닝 클럽 8주 운영', goal: '8주 동안 매주 토요일 10명이 참여하는 러닝 모임을 열고 정착 멤버 6명을 만든다', context: '혼자 운영, 예산 5만원, 동네 공원, 초보자 환영', note: '건강 · 모임' }
-  ];
-  let pickedPreset = -1;
-
-  function renderPresets() {
-    const grid = $('#presetGrid');
-    grid.innerHTML = PRESETS.map((p, i) => '<button type="button" class="preset' + (i === pickedPreset ? ' is-picked' : '') + '" data-preset="' + i + '"><b>' + esc(p.title) + '</b><span>' + esc(p.note) + ' · ' + esc(cut(p.goal, 60)) + '</span></button>').join('');
-  }
+  /* ─────────────────────── 12. 새 과제 모달 ───────────────────────
+     프리셋 카드는 화면에서 걷어냈다. 과제는 입력창에 직접 쓰는 방식만 남긴다. */
   function openNewModal(prefill) {
     const pre = prefill && typeof prefill === 'object' && prefill.title ? prefill : null;
-    pickedPreset = -1;
+    modalMode = true;
+    if (state.profile) draftExtras = (state.extras || []).map((e) => Object.assign({}, e));
     $('#inputTitle').value = pre ? pre.title : '';
     $('#inputGoal').value = pre ? (pre.goal || '') : '';
     $('#inputContext').value = pre ? (pre.context || '') : '';
-    renderPresets();
+    renderTeamUI();
     $('#modal').hidden = false;
     setTimeout(() => (pre ? $('#inputGoal') : $('#inputTitle')).focus(), 60);
   }
-  function closeNewModal() { $('#modal').hidden = true; }
+  function closeNewModal() { $('#modal').hidden = true; modalMode = false; }
+
+  /* ── 12-0. 팀 구성 UI (모달 + 가이드 드로어) ── */
+  let modalMode = false;
+  const INJECT_ROLES = () => ROLES.filter((r) => r.kind === 'inject');
+  function roleOptionsHtml(selected) {
+    return INJECT_ROLES().map((r) => '<option value="' + esc(r.id) + '"' + (r.id === selected ? ' selected' : '') + '>' + esc(r.label) + '</option>').join('') +
+      '<option value="custom"' + (selected === 'custom' ? ' selected' : '') + '>직접 입력…</option>';
+  }
+  function teamRowHtml(e, context) {
+    const t = toolById(e.id);
+    if (!t) return '';
+    const label = roleLabelOf(e.roleId, e.label);
+    return '<div class="team-row" data-team-row="' + esc(t.id) + '" style="--tc:' + esc(t.color || '#60a5fa') + '">' +
+      '<div class="tr-main"><b>' + esc(t.name) + '</b><span>' + esc(t.badge) + '</span></div>' +
+      '<select class="team-role" data-team-role="' + esc(t.id) + '" aria-label="' + esc(t.name) + ' 역할">' + roleOptionsHtml(e.roleId) + '</select>' +
+      (e.roleId === 'custom' ? '<input class="team-custom" type="text" data-team-custom="' + esc(t.id) + '" value="' + esc(e.label || '') + '" placeholder="역할 직접 입력" maxlength="24" />' : '') +
+      '<button type="button" class="tr-del" data-team-remove="' + esc(t.id) + '" aria-label="' + esc(t.name) + ' 팀에서 빼기">✕</button>' +
+      '</div>';
+  }
+  function teamNoteText() {
+    const live = teamIsLive();
+    const n = teamList().length;
+    if (live) return '협업 중입니다. 추가한 에이전트는 다음 단계부터 역할대로 발언하고 태스크를 맡습니다.' + (state.cursor >= 9 ? ' 지금은 마무리 단계라 다음 과제부터 반영됩니다.' : '');
+    if (n) return '추가 ' + n + '명이 기본 3인과 함께 협업합니다. 역할은 드롭다운으로 바꾸거나 직접 입력할 수 있습니다.';
+    return '기본 3인(피클 · 제미나이 태스크 · 코덱스)만으로도 실행됩니다. 가이드 에이전트를 더하면 그 역할까지 나눠 맡습니다.';
+  }
+
+  function renderTeamUI() {
+    const list = teamList();
+    const core = $('#teamCore');
+    if (core) {
+      core.innerHTML = CORE_AGENTS.map((a) => '<span class="core-chip" style="--tc:' + esc(a.color) + '"><b>' + esc(a.name) + '</b>' + esc(a.roleKo) + '<i>고정</i></span>').join('');
+    }
+    const add = $('#teamAdd');
+    if (add) {
+      add.innerHTML = INJECTABLE.map((t) => {
+        const picked = list.find((e) => e.id === t.id);
+        return '<label class="pick' + (picked ? ' is-on' : '') + '" style="--tc:' + esc(t.color || '#60a5fa') + '">' +
+          '<input type="checkbox" data-team-pick="' + esc(t.id) + '"' + (picked ? ' checked' : '') + ' />' +
+          '<span class="pick-name">' + esc(t.name) + '</span>' +
+          '<span class="pick-badge">' + esc(t.badge) + '</span>' +
+          '<span class="pick-role">' + esc(roleLabelOf(picked ? picked.roleId : t.role, picked && picked.label)) + '</span>' +
+          '</label>';
+      }).join('');
+    }
+    const rows = $('#teamRows');
+    if (rows) rows.innerHTML = list.map((e) => teamRowHtml(e)).join('');
+    const note = $('#teamNote');
+    if (note) note.textContent = teamNoteText();
+    const gt = $('#guideTeam');
+    if (gt) {
+      gt.innerHTML = '<div class="gt-head"><span>현재 팀 <b>' + teamAgents().length + '명</b></span><span>' + (teamIsLive() ? '협업 중 · 바로 반영' : '다음 과제에 적용') + '</span></div>' +
+        '<div class="gt-core">' + CORE_AGENTS.map((a) => '<span class="gt-chip">' + esc(a.name) + ' · ' + esc(a.roleKo) + '</span>').join('') +
+        list.map((e) => teamRowHtml(e)).join('') + '</div>' +
+        (list.length ? '' : '<p class="gt-empty">아직 추가 투입한 에이전트가 없습니다. 카드의 <b>팀에 투입</b>을 누르면 기본 3인과 함께 협업합니다.</p>');
+    }
+    renderGuideCardState();
+  }
+
+  function renderGuideCardState() {
+    const list = teamList();
+    $$('#guideList .guide-card').forEach((card) => {
+      const id = card.getAttribute('data-tool');
+      const on = list.some((e) => e.id === id);
+      card.classList.toggle('is-on-team', on);
+      const btn = card.querySelector('[data-tool-inject]');
+      if (btn) btn.textContent = on ? '팀에서 빼기' : '+ 팀에 투입';
+    });
+  }
 
   /* ──────────────── 12-1. 무료 에이전트 가이드 ──────────────── */
   const GUIDE_CATS = [
@@ -1704,152 +2298,6 @@
     { id: 'browser', label: '브라우저', title: '브라우저 자동화형', color: '#60a5fa' },
     { id: 'local', label: '로컬·멀티', title: '로컬 · 멀티 에이전트형', color: '#fbbf24' }
   ];
-  const GUIDE = [
-    {
-      id: 'pickle', cat: 'assistant', name: '피클', en: 'Pickle', free: 'free',
-      badge: '무료 플랜',
-      one: '일정·웹·메일·생활 행정·배포까지 직접 처리하는 개인 비서형 에이전트.',
-      scope: '무료 플랜 제공 · 브라우저·일정·메일·생활 행정·사이트 배포를 도구로 직접 실행',
-      mission: {
-        title: '피클로 생활 행정 5건 일괄 처리',
-        goal: '2주 안에 미뤄 둔 서류 제출·예약·문의 5건을 피클에게 맡겨 직접 끝낸다',
-        context: '무료 플랜, 하루 30분, 예산 0원, 결제·계약은 본인 승인 후 진행'
-      }
-    },
-    {
-      id: 'gemini-tasks', cat: 'assistant', name: '제미나이 태스크', en: 'Gemini Tasks', free: 'free',
-      badge: '무료 (2026-11 오픈)',
-      one: '조사·정리·일정처럼 반복되는 작업을 대신 실행하는 구글의 작업 실행 에이전트.',
-      scope: '2026년 11월부터 한국 포함 무료 사용자에게도 오픈 · 구글 계정으로 사용',
-      mission: {
-        title: '제미나이 태스크로 주간 조사 업무 자동화',
-        goal: '3주 안에 매주 반복되는 시장 조사 3건을 제미나이 태스크에 맡겨 보고서 초안까지 받는다',
-        context: '구글 계정 무료 사용, 평일 저녁 하루 1시간, 예산 0원, 조사 주제는 생활 금융'
-      }
-    },
-    {
-      id: 'codex', cat: 'coding', name: '코덱스', en: 'Codex · ChatGPT Free', free: 'partial',
-      badge: '부분 무료',
-      one: '코드를 읽고 고치고 테스트까지 돌리는 코딩 에이전트.',
-      scope: 'ChatGPT 무료 플랜 데스크톱 앱에서 사용 가능 · 웹·CLI·IDE 확장은 유료',
-      mission: {
-        title: '코덱스 무료판으로 4컷 생성기 버그 3건 수정',
-        goal: '1주 안에 4컷 생성기의 이미지 저장·중복 클릭·모바일 레이아웃 문제 3건을 고쳐 다시 배포한다',
-        context: 'ChatGPT 무료 플랜 데스크톱 앱만 사용, 평일 저녁 하루 2시간, 예산 0원, 코드는 GitHub 저장소 그대로'
-      }
-    },
-    {
-      id: 'antigravity', cat: 'coding', name: 'Google Antigravity', en: 'Antigravity', free: 'partial',
-      badge: '주간 무료 할당량',
-      one: '편집기 안에서 계획·실행·검증을 나눠 돌리는 구글의 에이전트 IDE·CLI.',
-      scope: '주간 무료 할당량 제공 · 할당량을 다 쓰면 다음 주기까지 대기',
-      mission: {
-        title: 'Antigravity 주간 할당량으로 뉴스 검색 앱 개선',
-        goal: '1주 안에 뉴스 검색 앱에 필터 1개를 추가하고 주간 무료 할당량 안에서 테스트까지 끝낸다',
-        context: '주간 무료 할당량만 사용, 평일 저녁 하루 1시간, 예산 0원, Windows 데스크톱'
-      }
-    },
-    {
-      id: 'jules', cat: 'coding', name: 'Google Jules', en: 'Jules', free: 'free',
-      badge: '무료 · 일 15태스크',
-      one: 'GitHub 저장소를 맡기면 비동기로 고쳐 오는 코딩 에이전트.',
-      scope: 'GitHub 저장소를 연결해 하루 15개 태스크까지 무료 실행',
-      mission: {
-        title: 'Jules로 저장소 문서·테스트 정리 15태스크',
-        goal: '5일 안에 GitHub 저장소의 문서·테스트 정리 작업 15개를 Jules에 맡겨 PR로 받는다',
-        context: '하루 15개 태스크 한도, 무료 플랜, 평일 저녁 하루 30분 검토, 예산 0원'
-      }
-    },
-    {
-      id: 'copilot', cat: 'coding', name: 'GitHub Copilot Free', en: 'Copilot Free', free: 'free',
-      badge: '무료 티어',
-      one: '편집기 안 자동완성과 제한된 에이전트 모드를 주는 무료 티어.',
-      scope: '월 2,000회 자동완성 + 제한된 에이전트 사용 · 카드 등록 없이 시작',
-      mission: {
-        title: 'Copilot 무료로 블로그 도구 리팩토링',
-        goal: '2주 안에 블로그 이전 도구의 중복 코드 3곳을 정리하고 자동완성 월 한도 안에서 마무리한다',
-        context: '월 2,000회 자동완성 한도, VS Code, 평일 저녁 하루 1시간, 예산 0원'
-      }
-    },
-    {
-      id: 'cursor', cat: 'coding', name: 'Cursor Free', en: 'Cursor', free: 'free',
-      badge: '무료 티어',
-      one: 'AI가 처음부터 붙어 있는 코드 에디터의 무료 티어.',
-      scope: '무료 티어 제공 · 고급 모델·에이전트 요청은 월 한도 안에서 사용',
-      mission: {
-        title: 'Cursor 무료 티어로 랜딩 페이지 1장 만들기',
-        goal: '1주 안에 랜딩 페이지 1장을 Cursor로 작성하고 모바일 화면까지 확인한다',
-        context: '무료 티어 한도, 하루 1시간, 예산 0원, 정적 HTML/CSS'
-      }
-    },
-    {
-      id: 'kiro', cat: 'coding', name: 'AWS Kiro', en: 'Kiro', free: 'free',
-      badge: '무료 · 월 50크레딧',
-      one: '스펙을 먼저 쓰게 하는 스펙 주도 개발 IDE.',
-      scope: '월 50크레딧 제공 · 소진되면 다음 달까지 대기',
-      mission: {
-        title: 'Kiro 월 50크레딧으로 스펙 문서 3장 작성',
-        goal: '이번 달 안에 다음 기능 스펙 문서 3장을 Kiro로 작성하고 크레딧 50개 안에서 끝낸다',
-        context: '월 50크레딧, 주말 하루 2시간, 예산 0원'
-      }
-    },
-    {
-      id: 'comet', cat: 'browser', name: 'Perplexity Comet', en: 'Comet', free: 'free',
-      badge: '무료 다운로드',
-      one: '탭을 읽고 클릭·입력까지 대신하는 AI 브라우저 에이전트.',
-      scope: '무료로 내려받아 사용 · ChatGPT Work · Claude in Chrome은 유료',
-      mission: {
-        title: 'Comet으로 경쟁사 가격 조사 자동화',
-        goal: '1주 안에 경쟁 서비스 5곳의 가격·무료 조건을 Comet으로 훑어 비교표 1장으로 만든다',
-        context: '무료 브라우저, 하루 30분, 예산 0원, 결제·로그인은 하지 않음'
-      }
-    },
-    {
-      id: 'browser-use', cat: 'browser', name: 'Browser Use', en: 'browser-use', free: 'free',
-      badge: '오픈소스 MIT',
-      one: '파이썬으로 브라우저 조작을 자동화하는 오픈소스 라이브러리.',
-      scope: 'MIT 라이선스로 직접 실행 · 클라우드는 가입 시 1달러 무료 크레딧',
-      mission: {
-        title: 'Browser Use로 반복 조회 스크립트 만들기',
-        goal: '2주 안에 매일 확인하는 사이트 3곳을 자동으로 조회해 결과를 CSV로 남기는 스크립트를 만든다',
-        context: '오픈소스 MIT, 파이썬, 하루 1시간, 예산 0원, 클라우드는 무료 크레딧만'
-      }
-    },
-    {
-      id: 'ollama', cat: 'local', name: 'Ollama + 오픈 모델', en: 'Ollama · Qwen 등', free: 'free',
-      badge: '완전 무료 · 로컬',
-      one: '내 PC·맥에서 오픈 모델을 무제한으로 돌리는 로컬 실행기.',
-      scope: '내 PC·맥에서 실행 · API 비용 0원, 모델 크기만큼 메모리 필요',
-      mission: {
-        title: 'Ollama 로컬 모델로 블로그 초안 3편 생성',
-        goal: '2주 안에 Ollama와 Qwen 모델로 블로그 초안 3편을 만들고 발행 가능한 수준까지 다듬는다',
-        context: '내 PC에서 실행, API 비용 0원, 하루 1시간, 16GB 메모리'
-      }
-    },
-    {
-      id: 'openrouter', cat: 'local', name: 'OpenRouter 무료 모델', en: 'OpenRouter', free: 'free',
-      badge: '무료 티어',
-      one: '여러 모델을 한 API로 갈아 쓰는 라우터의 무료 모델.',
-      scope: '무료 모델 기준 분당 20회 · 하루 50회',
-      mission: {
-        title: 'OpenRouter 무료 모델로 뉴스 요약 실험',
-        goal: '1주 안에 OpenRouter 무료 모델 2개로 뉴스 요약 품질을 비교하고 쓸 모델 1개를 고른다',
-        context: '분당 20회·일 50회 한도, 하루 30분, 예산 0원'
-      }
-    },
-    {
-      id: 'agent-collab-studio', cat: 'local', name: 'Agent Collab Studio', en: '이 화면', free: 'free',
-      badge: '무료 · 설치 불필요',
-      one: '피클·제미나이 태스크·코덱스가 역할을 나눠 협업하는 다중 에이전트 워크플로우.',
-      scope: 'API 키 0원 · 브라우저에서 바로 실행, 대화·결과물은 이 브라우저에만 저장',
-      mission: {
-        title: 'Agent Collab Studio로 3자 협업 과제 설계',
-        goal: '이번 주 안에 실제로 진행할 과제 2개를 10턴 협업으로 돌려 실행안과 체크리스트를 뽑는다',
-        context: 'API 키 0원, 브라우저만 사용, 하루 30분, 역할 분담은 피클·제미나이 태스크·코덱스'
-      }
-    }
-  ];
-
   let guideCat = 'all';
 
   const guideCatOf = (id) => GUIDE_CATS.find((c) => c.id === id) || GUIDE_CATS[0];
@@ -1876,12 +2324,18 @@
 
   function guideCardHtml(g) {
     const cat = guideCatOf(g.cat);
-    return '<article class="guide-card" data-tool="' + esc(g.id) + '" data-cat="' + esc(g.cat) + '" style="--gc:' + cat.color + '">' +
+    const onTeam = teamList().some((e) => e.id === g.id);
+    const missionBtn = '<button type="button" class="btn btn-sm gc-btn" data-tool-mission="' + esc(g.id) + '">이 도구 활용해 과제 만들기</button>';
+    const actions = g.injectable
+      ? '<div class="gc-actions">' + missionBtn +
+        '<button type="button" class="btn btn-sm gc-inject' + (onTeam ? ' is-on' : '') + '" data-tool-inject="' + esc(g.id) + '" aria-pressed="' + (onTeam ? 'true' : 'false') + '">' + (onTeam ? '팀에서 빼기' : '+ 팀에 투입') + '</button></div>'
+      : '<div class="gc-actions">' + missionBtn + '<span class="gc-fixed">' + (g.self ? '이 화면 · 팀을 돌리는 곳' : '기본 팀 · 고정') + '</span></div>';
+    return '<article class="guide-card' + (onTeam ? ' is-on-team' : '') + '" data-tool="' + esc(g.id) + '" data-cat="' + esc(g.cat) + '" style="--gc:' + cat.color + '">' +
       '<div class="gc-top"><div class="gc-name"><b>' + esc(g.name) + '</b><span>' + esc(g.en) + '</span></div>' +
       '<span class="gc-badge' + (g.free === 'partial' ? ' partial' : '') + '">' + esc(g.badge) + '</span></div>' +
       '<p class="gc-one">' + esc(g.one) + '</p>' +
       '<div class="gc-free"><span>무료 제공 범위 · 제한</span><p>' + esc(g.scope) + '</p></div>' +
-      '<button type="button" class="btn btn-sm gc-btn" data-tool-mission="' + esc(g.id) + '">이 도구 활용해 과제 만들기</button>' +
+      actions +
       '</article>';
   }
 
@@ -1900,6 +2354,7 @@
         '<div class="gg-grid">' + items.map(guideCardHtml).join('') + '</div>' +
         '</section>';
     }).join('');
+    renderTeamUI();
   }
 
   function openGuide(cat) {
@@ -1980,6 +2435,8 @@
       if (b) setGuideCat(b.getAttribute('data-guide-cat'));
     });
     $('#guideList').addEventListener('click', (e) => {
+      const inj = e.target.closest('[data-tool-inject]');
+      if (inj) { toggleToolInTeam(inj.getAttribute('data-tool-inject')); return; }
       const b = e.target.closest('[data-tool-mission]');
       if (b) applyToolMission(b.getAttribute('data-tool-mission'));
     });
@@ -2059,16 +2516,11 @@
 
     $('#btnCloseModal').addEventListener('click', closeNewModal);
     $('#modal').addEventListener('click', (e) => { if (e.target === $('#modal')) closeNewModal(); });
-    $('#presetGrid').addEventListener('click', (e) => {
-      const b = e.target.closest('[data-preset]');
-      if (!b) return;
-      pickedPreset = parseInt(b.getAttribute('data-preset'), 10);
-      const p = PRESETS[pickedPreset];
-      $('#inputTitle').value = p.title;
-      $('#inputGoal').value = p.goal;
-      $('#inputContext').value = p.context;
-      renderPresets();
-      $('#inputGoal').focus();
+    ['#teamAdd', '#teamRows', '#guideTeam'].forEach((sel) => {
+      const el = $(sel);
+      if (!el) return;
+      el.addEventListener('change', onTeamChange);
+      el.addEventListener('click', onTeamClick);
     });
     $('#formMission').addEventListener('submit', (e) => {
       e.preventDefault();
@@ -2098,7 +2550,6 @@
     if (booted) return;
     booted = true;
     bind();
-    renderPresets();
     switchRightTab('tasks');
     switchMobileTab(state.mobileTab);
     const saved = readJSON(LS_SESSION, null);
@@ -2137,10 +2588,32 @@
     },
     historyCount: () => readJSON(LS_HISTORY, []).length,
     restoreLatest: () => { const l = readJSON(LS_HISTORY, []); return l.length ? openHistoryItem(l[0].id) : false; },
-    reset: () => { stopAuto(); try { localStorage.removeItem(LS_SESSION); } catch (e) {} state.profile = null; state.messages = []; state.tasks = []; state.artifacts = []; state.cursor = 0; state.report = null; state.completed = false; state.feedback = []; renderAll(); },
+    reset: () => { stopAuto(); try { localStorage.removeItem(LS_SESSION); } catch (e) {} state.profile = null; state.messages = []; state.tasks = []; state.artifacts = []; state.cursor = 0; state.report = null; state.completed = false; state.feedback = []; state.extras = []; stageQueue = []; renderAll(); },
     TURN_TOTAL: TURN_TOTAL,
     STAGE_NAMES: STAGE_NAMES,
-    AGENTS: AGENTS.map((a) => ({ id: a.id, name: a.name, role: a.roleKo }))
+    AGENTS: CORE_AGENTS.map((a) => ({ id: a.id, name: a.name, role: a.roleKo })),
+    /* 카탈로그 · 팀 투입 API */
+    catalog: {
+      version: () => CATALOG.version,
+      tools: () => TOOLS.map((t) => ({ id: t.id, name: t.name, cat: t.cat, role: t.role, injectable: t.injectable, self: !!t.self, badge: t.badge, limit: t.limit })),
+      injectable: () => INJECTABLE.map((t) => ({ id: t.id, name: t.name, role: t.role, badge: t.badge })),
+      roles: () => ROLES.map((r) => ({ id: r.id, label: r.label, kind: r.kind, stages: r.stages })),
+      injectRoles: () => INJECT_ROLES().map((r) => r.label),
+      roleOf: (id) => { const t = toolById(id); return t ? { id: t.role, label: (roleById(t.role) || {}).label } : null; }
+    },
+    team: {
+      current: () => teamSummary(),
+      ids: () => teamAgents().map((a) => a.id),
+      extras: () => (teamList() || []).map((e) => ({ id: e.id, roleId: e.roleId, role: roleLabelOf(e.roleId, e.label) })),
+      add: (id, roleId) => addTeamAgent(id, roleId),
+      remove: (id) => removeTeamAgent(id),
+      setRole: (id, roleId, custom) => setTeamRole(id, roleId, custom),
+      toggle: (id) => toggleToolInTeam(id),
+      draft: (list) => { draftExtras = (list || []).map((e) => Object.assign({}, typeof e === 'string' ? { id: e, roleId: (toolById(e) || {}).role } : e)); return draftExtras.slice(); },
+      clearDraft: () => { draftExtras = []; return []; },
+      live: () => teamIsLive()
+    },
+    turnStages: (roleId) => { const r = roleById(roleId); return r ? r.stages.slice() : []; }
   };
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
