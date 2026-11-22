@@ -1243,7 +1243,8 @@
         '<h3>과제를 넣으면 세 에이전트가 바로 시작합니다</h3>' +
         '<p>피클이 목표와 성공 기준을 세우고, 제미나이 태스크가 실행 단계를, 코덱스가 허점과 리스크를 검증합니다. 마지막에 피클이 하나의 결과물로 종합합니다.</p>' +
         '<div class="empty-steps"><span class="empty-step">① 과제 입력</span><span class="empty-step">② 10턴 협업</span><span class="empty-step">③ 최종 결과물</span><span class="empty-step">④ .md · .html 내보내기</span></div>' +
-        '<button type="button" class="btn btn-primary" data-open-new>새 과제 시작</button>' +
+        '<div class="empty-actions"><button type="button" class="btn btn-primary" data-open-new>새 과제 시작</button>' +
+        '<button type="button" class="btn" data-open-guide>무료 에이전트 가이드 보기</button></div>' +
         '</div>';
       $('#msgCount').textContent = '0 메시지';
       return;
@@ -1683,16 +1684,243 @@
     const grid = $('#presetGrid');
     grid.innerHTML = PRESETS.map((p, i) => '<button type="button" class="preset' + (i === pickedPreset ? ' is-picked' : '') + '" data-preset="' + i + '"><b>' + esc(p.title) + '</b><span>' + esc(p.note) + ' · ' + esc(cut(p.goal, 60)) + '</span></button>').join('');
   }
-  function openNewModal() {
+  function openNewModal(prefill) {
+    const pre = prefill && typeof prefill === 'object' && prefill.title ? prefill : null;
     pickedPreset = -1;
-    $('#inputTitle').value = '';
-    $('#inputGoal').value = '';
-    $('#inputContext').value = '';
+    $('#inputTitle').value = pre ? pre.title : '';
+    $('#inputGoal').value = pre ? (pre.goal || '') : '';
+    $('#inputContext').value = pre ? (pre.context || '') : '';
     renderPresets();
     $('#modal').hidden = false;
-    setTimeout(() => $('#inputTitle').focus(), 60);
+    setTimeout(() => (pre ? $('#inputGoal') : $('#inputTitle')).focus(), 60);
   }
   function closeNewModal() { $('#modal').hidden = true; }
+
+  /* ──────────────── 12-1. 무료 에이전트 가이드 ──────────────── */
+  const GUIDE_CATS = [
+    { id: 'all', label: '전체', color: '#5eead4' },
+    { id: 'assistant', label: '개인비서', title: '개인 비서 · 생활 실행형', color: '#5eead4' },
+    { id: 'coding', label: '코딩', title: '코딩 · 개발 에이전트', color: '#c4b5fd' },
+    { id: 'browser', label: '브라우저', title: '브라우저 자동화형', color: '#60a5fa' },
+    { id: 'local', label: '로컬·멀티', title: '로컬 · 멀티 에이전트형', color: '#fbbf24' }
+  ];
+  const GUIDE = [
+    {
+      id: 'pickle', cat: 'assistant', name: '피클', en: 'Pickle', free: 'free',
+      badge: '무료 플랜',
+      one: '일정·웹·메일·생활 행정·배포까지 직접 처리하는 개인 비서형 에이전트.',
+      scope: '무료 플랜 제공 · 브라우저·일정·메일·생활 행정·사이트 배포를 도구로 직접 실행',
+      mission: {
+        title: '피클로 생활 행정 5건 일괄 처리',
+        goal: '2주 안에 미뤄 둔 서류 제출·예약·문의 5건을 피클에게 맡겨 직접 끝낸다',
+        context: '무료 플랜, 하루 30분, 예산 0원, 결제·계약은 본인 승인 후 진행'
+      }
+    },
+    {
+      id: 'gemini-tasks', cat: 'assistant', name: '제미나이 태스크', en: 'Gemini Tasks', free: 'free',
+      badge: '무료 (2026-11 오픈)',
+      one: '조사·정리·일정처럼 반복되는 작업을 대신 실행하는 구글의 작업 실행 에이전트.',
+      scope: '2026년 11월부터 한국 포함 무료 사용자에게도 오픈 · 구글 계정으로 사용',
+      mission: {
+        title: '제미나이 태스크로 주간 조사 업무 자동화',
+        goal: '3주 안에 매주 반복되는 시장 조사 3건을 제미나이 태스크에 맡겨 보고서 초안까지 받는다',
+        context: '구글 계정 무료 사용, 평일 저녁 하루 1시간, 예산 0원, 조사 주제는 생활 금융'
+      }
+    },
+    {
+      id: 'codex', cat: 'coding', name: '코덱스', en: 'Codex · ChatGPT Free', free: 'partial',
+      badge: '부분 무료',
+      one: '코드를 읽고 고치고 테스트까지 돌리는 코딩 에이전트.',
+      scope: 'ChatGPT 무료 플랜 데스크톱 앱에서 사용 가능 · 웹·CLI·IDE 확장은 유료',
+      mission: {
+        title: '코덱스 무료판으로 4컷 생성기 버그 3건 수정',
+        goal: '1주 안에 4컷 생성기의 이미지 저장·중복 클릭·모바일 레이아웃 문제 3건을 고쳐 다시 배포한다',
+        context: 'ChatGPT 무료 플랜 데스크톱 앱만 사용, 평일 저녁 하루 2시간, 예산 0원, 코드는 GitHub 저장소 그대로'
+      }
+    },
+    {
+      id: 'antigravity', cat: 'coding', name: 'Google Antigravity', en: 'Antigravity', free: 'partial',
+      badge: '주간 무료 할당량',
+      one: '편집기 안에서 계획·실행·검증을 나눠 돌리는 구글의 에이전트 IDE·CLI.',
+      scope: '주간 무료 할당량 제공 · 할당량을 다 쓰면 다음 주기까지 대기',
+      mission: {
+        title: 'Antigravity 주간 할당량으로 뉴스 검색 앱 개선',
+        goal: '1주 안에 뉴스 검색 앱에 필터 1개를 추가하고 주간 무료 할당량 안에서 테스트까지 끝낸다',
+        context: '주간 무료 할당량만 사용, 평일 저녁 하루 1시간, 예산 0원, Windows 데스크톱'
+      }
+    },
+    {
+      id: 'jules', cat: 'coding', name: 'Google Jules', en: 'Jules', free: 'free',
+      badge: '무료 · 일 15태스크',
+      one: 'GitHub 저장소를 맡기면 비동기로 고쳐 오는 코딩 에이전트.',
+      scope: 'GitHub 저장소를 연결해 하루 15개 태스크까지 무료 실행',
+      mission: {
+        title: 'Jules로 저장소 문서·테스트 정리 15태스크',
+        goal: '5일 안에 GitHub 저장소의 문서·테스트 정리 작업 15개를 Jules에 맡겨 PR로 받는다',
+        context: '하루 15개 태스크 한도, 무료 플랜, 평일 저녁 하루 30분 검토, 예산 0원'
+      }
+    },
+    {
+      id: 'copilot', cat: 'coding', name: 'GitHub Copilot Free', en: 'Copilot Free', free: 'free',
+      badge: '무료 티어',
+      one: '편집기 안 자동완성과 제한된 에이전트 모드를 주는 무료 티어.',
+      scope: '월 2,000회 자동완성 + 제한된 에이전트 사용 · 카드 등록 없이 시작',
+      mission: {
+        title: 'Copilot 무료로 블로그 도구 리팩토링',
+        goal: '2주 안에 블로그 이전 도구의 중복 코드 3곳을 정리하고 자동완성 월 한도 안에서 마무리한다',
+        context: '월 2,000회 자동완성 한도, VS Code, 평일 저녁 하루 1시간, 예산 0원'
+      }
+    },
+    {
+      id: 'cursor', cat: 'coding', name: 'Cursor Free', en: 'Cursor', free: 'free',
+      badge: '무료 티어',
+      one: 'AI가 처음부터 붙어 있는 코드 에디터의 무료 티어.',
+      scope: '무료 티어 제공 · 고급 모델·에이전트 요청은 월 한도 안에서 사용',
+      mission: {
+        title: 'Cursor 무료 티어로 랜딩 페이지 1장 만들기',
+        goal: '1주 안에 랜딩 페이지 1장을 Cursor로 작성하고 모바일 화면까지 확인한다',
+        context: '무료 티어 한도, 하루 1시간, 예산 0원, 정적 HTML/CSS'
+      }
+    },
+    {
+      id: 'kiro', cat: 'coding', name: 'AWS Kiro', en: 'Kiro', free: 'free',
+      badge: '무료 · 월 50크레딧',
+      one: '스펙을 먼저 쓰게 하는 스펙 주도 개발 IDE.',
+      scope: '월 50크레딧 제공 · 소진되면 다음 달까지 대기',
+      mission: {
+        title: 'Kiro 월 50크레딧으로 스펙 문서 3장 작성',
+        goal: '이번 달 안에 다음 기능 스펙 문서 3장을 Kiro로 작성하고 크레딧 50개 안에서 끝낸다',
+        context: '월 50크레딧, 주말 하루 2시간, 예산 0원'
+      }
+    },
+    {
+      id: 'comet', cat: 'browser', name: 'Perplexity Comet', en: 'Comet', free: 'free',
+      badge: '무료 다운로드',
+      one: '탭을 읽고 클릭·입력까지 대신하는 AI 브라우저 에이전트.',
+      scope: '무료로 내려받아 사용 · ChatGPT Work · Claude in Chrome은 유료',
+      mission: {
+        title: 'Comet으로 경쟁사 가격 조사 자동화',
+        goal: '1주 안에 경쟁 서비스 5곳의 가격·무료 조건을 Comet으로 훑어 비교표 1장으로 만든다',
+        context: '무료 브라우저, 하루 30분, 예산 0원, 결제·로그인은 하지 않음'
+      }
+    },
+    {
+      id: 'browser-use', cat: 'browser', name: 'Browser Use', en: 'browser-use', free: 'free',
+      badge: '오픈소스 MIT',
+      one: '파이썬으로 브라우저 조작을 자동화하는 오픈소스 라이브러리.',
+      scope: 'MIT 라이선스로 직접 실행 · 클라우드는 가입 시 1달러 무료 크레딧',
+      mission: {
+        title: 'Browser Use로 반복 조회 스크립트 만들기',
+        goal: '2주 안에 매일 확인하는 사이트 3곳을 자동으로 조회해 결과를 CSV로 남기는 스크립트를 만든다',
+        context: '오픈소스 MIT, 파이썬, 하루 1시간, 예산 0원, 클라우드는 무료 크레딧만'
+      }
+    },
+    {
+      id: 'ollama', cat: 'local', name: 'Ollama + 오픈 모델', en: 'Ollama · Qwen 등', free: 'free',
+      badge: '완전 무료 · 로컬',
+      one: '내 PC·맥에서 오픈 모델을 무제한으로 돌리는 로컬 실행기.',
+      scope: '내 PC·맥에서 실행 · API 비용 0원, 모델 크기만큼 메모리 필요',
+      mission: {
+        title: 'Ollama 로컬 모델로 블로그 초안 3편 생성',
+        goal: '2주 안에 Ollama와 Qwen 모델로 블로그 초안 3편을 만들고 발행 가능한 수준까지 다듬는다',
+        context: '내 PC에서 실행, API 비용 0원, 하루 1시간, 16GB 메모리'
+      }
+    },
+    {
+      id: 'openrouter', cat: 'local', name: 'OpenRouter 무료 모델', en: 'OpenRouter', free: 'free',
+      badge: '무료 티어',
+      one: '여러 모델을 한 API로 갈아 쓰는 라우터의 무료 모델.',
+      scope: '무료 모델 기준 분당 20회 · 하루 50회',
+      mission: {
+        title: 'OpenRouter 무료 모델로 뉴스 요약 실험',
+        goal: '1주 안에 OpenRouter 무료 모델 2개로 뉴스 요약 품질을 비교하고 쓸 모델 1개를 고른다',
+        context: '분당 20회·일 50회 한도, 하루 30분, 예산 0원'
+      }
+    },
+    {
+      id: 'agent-collab-studio', cat: 'local', name: 'Agent Collab Studio', en: '이 화면', free: 'free',
+      badge: '무료 · 설치 불필요',
+      one: '피클·제미나이 태스크·코덱스가 역할을 나눠 협업하는 다중 에이전트 워크플로우.',
+      scope: 'API 키 0원 · 브라우저에서 바로 실행, 대화·결과물은 이 브라우저에만 저장',
+      mission: {
+        title: 'Agent Collab Studio로 3자 협업 과제 설계',
+        goal: '이번 주 안에 실제로 진행할 과제 2개를 10턴 협업으로 돌려 실행안과 체크리스트를 뽑는다',
+        context: 'API 키 0원, 브라우저만 사용, 하루 30분, 역할 분담은 피클·제미나이 태스크·코덱스'
+      }
+    }
+  ];
+
+  let guideCat = 'all';
+
+  const guideCatOf = (id) => GUIDE_CATS.find((c) => c.id === id) || GUIDE_CATS[0];
+  const guideByTool = (id) => GUIDE.find((g) => g.id === id) || null;
+
+  function renderGuideFilters() {
+    const wrap = $('#guideFilters');
+    if (!wrap) return;
+    wrap.innerHTML = GUIDE_CATS.map((c) => {
+      const n = c.id === 'all' ? GUIDE.length : GUIDE.filter((g) => g.cat === c.id).length;
+      const on = guideCat === c.id;
+      return '<button type="button" class="gf' + (on ? ' is-on' : '') + '" role="tab" aria-selected="' + (on ? 'true' : 'false') + '" data-guide-cat="' + c.id + '">' +
+        esc(c.label) + '<span>' + n + '</span></button>';
+    }).join('');
+  }
+
+  function guideSummary() {
+    const limited = GUIDE.filter((g) => g.free === 'partial').length;
+    return '<span class="gs"><b>' + GUIDE.length + '</b>개 도구</span>' +
+      '<span class="gs"><b>4</b>가지 유형</span>' +
+      '<span class="gs">전부 무료로 시작 가능</span>' +
+      '<span class="gs">무료 범위 제한 <b>' + limited + '</b>개</span>';
+  }
+
+  function guideCardHtml(g) {
+    const cat = guideCatOf(g.cat);
+    return '<article class="guide-card" data-tool="' + esc(g.id) + '" data-cat="' + esc(g.cat) + '" style="--gc:' + cat.color + '">' +
+      '<div class="gc-top"><div class="gc-name"><b>' + esc(g.name) + '</b><span>' + esc(g.en) + '</span></div>' +
+      '<span class="gc-badge' + (g.free === 'partial' ? ' partial' : '') + '">' + esc(g.badge) + '</span></div>' +
+      '<p class="gc-one">' + esc(g.one) + '</p>' +
+      '<div class="gc-free"><span>무료 제공 범위 · 제한</span><p>' + esc(g.scope) + '</p></div>' +
+      '<button type="button" class="btn btn-sm gc-btn" data-tool-mission="' + esc(g.id) + '">이 도구 활용해 과제 만들기</button>' +
+      '</article>';
+  }
+
+  function renderGuide() {
+    renderGuideFilters();
+    const sum = $('#guideSummary');
+    if (sum) sum.innerHTML = guideSummary();
+    const list = $('#guideList');
+    if (!list) return;
+    const groups = guideCat === 'all' ? GUIDE_CATS.filter((c) => c.id !== 'all') : [guideCatOf(guideCat)];
+    list.innerHTML = groups.map((c) => {
+      const items = GUIDE.filter((g) => g.cat === c.id);
+      if (!items.length) return '';
+      return '<section class="guide-group" data-guide-group="' + esc(c.id) + '" style="--gc:' + c.color + '">' +
+        '<div class="gg-head"><b>' + esc(c.title || c.label) + '</b><span>' + items.length + '개 · 무료 ' + items.filter((g) => g.free === 'free').length + '</span></div>' +
+        '<div class="gg-grid">' + items.map(guideCardHtml).join('') + '</div>' +
+        '</section>';
+    }).join('');
+  }
+
+  function openGuide(cat) {
+    if (cat && guideCatOf(cat).id === cat) guideCat = cat;
+    renderGuide();
+    $('#guideOverlay').hidden = false;
+  }
+  function closeGuide() { $('#guideOverlay').hidden = true; }
+  function applyToolMission(id) {
+    const g = guideByTool(id);
+    if (!g) return false;
+    closeGuide();
+    openNewModal(g.mission);
+    showToast(g.name + '로 할 과제를 채웠습니다 — 확인하고 협업 시작을 누르세요');
+    return true;
+  }
+  function setGuideCat(cat) {
+    guideCat = guideCatOf(cat).id;
+    renderGuide();
+    return guideCat;
+  }
 
   /* ─────────────────────── 13. 토스트 / 탭 ─────────────────────── */
   let toastTimer = null;
@@ -1742,8 +1970,20 @@
       renderControls();
       showToast('협업 속도 ' + state.speed + 'x');
     });
-    $('#btnNew').addEventListener('click', openNewModal);
+    $('#btnNew').addEventListener('click', () => openNewModal());
     $('#btnHistory').addEventListener('click', openHistory);
+    $('#btnGuide').addEventListener('click', () => openGuide());
+    $('#btnCloseGuide').addEventListener('click', closeGuide);
+    $('#guideOverlay').addEventListener('click', (e) => { if (e.target === $('#guideOverlay')) closeGuide(); });
+    $('#guideFilters').addEventListener('click', (e) => {
+      const b = e.target.closest('[data-guide-cat]');
+      if (b) setGuideCat(b.getAttribute('data-guide-cat'));
+    });
+    $('#guideList').addEventListener('click', (e) => {
+      const b = e.target.closest('[data-tool-mission]');
+      if (b) applyToolMission(b.getAttribute('data-tool-mission'));
+    });
+    $('#btnGuideFromModal').addEventListener('click', () => { closeNewModal(); openGuide(); });
     $('#btnFocus').addEventListener('click', () => { state.focus = !state.focus; renderControls(); });
     $('#btnClear').addEventListener('click', () => {
       if (!state.profile) return;
@@ -1788,6 +2028,7 @@
 
     $('#chatFeed').addEventListener('click', (e) => {
       if (e.target.closest('[data-open-new]')) openNewModal();
+      else if (e.target.closest('[data-open-guide]')) openGuide();
     });
 
     $('#artifactList').addEventListener('click', (e) => {
@@ -1844,6 +2085,7 @@
       if (e.key !== 'Escape') return;
       if (!$('#reportOverlay').hidden) closeReport();
       else if (!$('#historyOverlay').hidden) closeHistory();
+      else if (!$('#guideOverlay').hidden) closeGuide();
       else if (!$('#modal').hidden) closeNewModal();
     });
 
@@ -1881,6 +2123,18 @@
     directive: submitDirective,
     openReport: openReport,
     openHistory: openHistory,
+    openGuide: openGuide,
+    guide: {
+      count: () => GUIDE.length,
+      categories: () => GUIDE_CATS.map((c) => c.label),
+      catIds: () => GUIDE_CATS.map((c) => c.id),
+      category: () => guideCat,
+      filter: setGuideCat,
+      cards: () => GUIDE.map((g) => ({ id: g.id, name: g.name, cat: g.cat, free: g.free, badge: g.badge, scope: g.scope })),
+      missions: () => GUIDE.map((g) => ({ id: g.id, name: g.name, title: g.mission.title, goal: g.mission.goal, context: g.mission.context })),
+      visible: () => $$('#guideList .guide-card').length,
+      apply: applyToolMission
+    },
     historyCount: () => readJSON(LS_HISTORY, []).length,
     restoreLatest: () => { const l = readJSON(LS_HISTORY, []); return l.length ? openHistoryItem(l[0].id) : false; },
     reset: () => { stopAuto(); try { localStorage.removeItem(LS_SESSION); } catch (e) {} state.profile = null; state.messages = []; state.tasks = []; state.artifacts = []; state.cursor = 0; state.report = null; state.completed = false; state.feedback = []; renderAll(); },

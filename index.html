@@ -40,6 +40,10 @@
       </div>
 
       <div class="topbar-controls">
+        <button type="button" class="ctl ctl-guide" id="btnGuide" title="에이전트 종류 · 무료 버전 가이드" aria-label="에이전트 종류 · 무료 버전 가이드 열기">
+          <svg viewBox="0 0 24 24" class="ico"><rect x="4" y="8" width="16" height="11" rx="3"/><path d="M9.2 12.6h.01M14.8 12.6h.01"/><path d="M12 4.6v3.4M8.4 19v2M15.6 19v2"/><path d="M10.6 15.4h2.8"/></svg>
+          <span class="ctl-txt">무료 에이전트 가이드</span>
+        </button>
         <button type="button" class="ctl" id="btnSpeed" title="협업 속도 조절 (1x → 2x → 4x)">
           <svg viewBox="0 0 24 24" class="ico"><path d="M12 21a9 9 0 1 1 9-9" /><path d="M12 12l4-3" /><circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none"/></svg>
           <span id="speedLabel">1x</span>
@@ -235,6 +239,11 @@
     <div class="modal-body">
       <div class="preset-head"><span class="panel-title">바로 테스트할 추천 과제</span><span class="panel-hint">누르면 입력값이 채워집니다</span></div>
       <div class="preset-grid" id="presetGrid"></div>
+      <button type="button" class="guide-link" id="btnGuideFromModal">
+        <svg viewBox="0 0 24 24" class="ico"><rect x="4" y="8" width="16" height="11" rx="3"/><path d="M9.2 12.6h.01M14.8 12.6h.01"/><path d="M12 4.6v3.4M8.4 19v2M15.6 19v2"/></svg>
+        무료 에이전트 가이드에서 도구 고르기
+        <span aria-hidden="true">→</span>
+      </button>
 
       <form id="formMission" class="form">
         <label class="field">
@@ -302,6 +311,27 @@
     </div>
     <p class="drawer-note">이 브라우저(localStorage)에만 저장됩니다. 항목을 누르면 그 시점의 협업으로 돌아갑니다.</p>
     <div class="drawer-body" id="historyList"></div>
+  </section>
+</div>
+
+<!-- ══════════ FREE AGENT GUIDE DRAWER ══════════ -->
+<div class="overlay overlay-right" id="guideOverlay" hidden>
+  <section class="drawer drawer-guide" role="dialog" aria-modal="true" aria-labelledby="guideTitle">
+    <div class="drawer-head">
+      <div>
+        <span class="eyebrow">AGENT FIELD GUIDE · FREE TIERS</span>
+        <h2 id="guideTitle">에이전트 종류 · 무료 버전 가이드</h2>
+      </div>
+      <button type="button" class="iconbtn" id="btnCloseGuide" aria-label="닫기">
+        <svg viewBox="0 0 24 24" class="ico"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+    </div>
+    <p class="drawer-note">AI 에이전트를 <b>4가지 유형</b>으로 나눠 무료로 시작할 수 있는 도구만 모았습니다. 무료 범위·제한은 2026년 11월 기준이고, 카드의 버튼을 누르면 그 도구로 할 과제가 채워진 새 과제 창이 열립니다.</p>
+    <div class="guide-summary" id="guideSummary"></div>
+    <div class="guide-filters" id="guideFilters" role="tablist" aria-label="에이전트 유형 필터"></div>
+    <div class="drawer-body guide-body">
+      <div class="guide-list" id="guideList"></div>
+    </div>
   </section>
 </div>
 
