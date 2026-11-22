@@ -1,0 +1,1306 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>에이전트 협업 스튜디오 · 파클 · 코덱스 · 태스크</title>
+  <script src="https://cdn.tailwindcss.com/3.4.17"></script>
+  <script src="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.min.js"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif;
+    }
+    code, pre {
+      font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    }
+    .scrollbar-thin::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    .scrollbar-thin::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    .scrollbar-thin::-webkit-scrollbar-thumb {
+      background: rgba(148, 163, 184, 0.3);
+      border-radius: 9999px;
+    }
+    .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+      background: rgba(148, 163, 184, 0.5);
+    }
+    @keyframes pulse-dot {
+      0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; }
+      40% { transform: scale(1); opacity: 1; }
+    }
+    .typing-dot {
+      animation: pulse-dot 1.4s infinite ease-in-out both;
+    }
+    .typing-dot:nth-child(2) { animation-delay: 0.2s; }
+    .typing-dot:nth-child(3) { animation-delay: 0.4s; }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 h-screen flex flex-col overflow-hidden select-none sm:select-auto">
+
+  <!-- Top Header -->
+  <header class="border-b border-slate-800 bg-slate-900/90 backdrop-blur px-3 sm:px-5 py-2.5 flex flex-wrap items-center justify-between gap-2 shrink-0">
+    <div class="flex items-center gap-2.5 min-w-0">
+      <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500 via-violet-500 to-emerald-500 flex items-center justify-center shadow-lg shadow-indigo-500/20 shrink-0">
+        <i data-lucide="network" class="w-4 h-4 text-white"></i>
+      </div>
+      <div class="min-w-0">
+        <div class="flex items-center gap-2">
+          <h1 class="text-sm sm:text-base font-bold tracking-tight text-white truncate">에이전트 협업 스튜디오</h1>
+          <span class="hidden md:inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-indigo-500/15 text-indigo-300 border border-indigo-500/30">
+            파클 · 코덱스 · 태스크
+          </span>
+        </div>
+        <p id="mission-subtitle" class="text-[11px] text-slate-400 truncate">미션: 실시간 알림 마이크로서비스 설계 및 구현</p>
+      </div>
+    </div>
+
+    <div class="flex items-center gap-1.5 sm:gap-2 flex-wrap">
+      <!-- Scenario Selector -->
+      <select id="scenario-select" aria-label="협업 시나리오 선택" class="bg-slate-800 border border-slate-700 text-slate-200 text-xs rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+        <option value="realtime-notify">실시간 알림 서비스 구축</option>
+        <option value="auth-refactor">JWT 인증 보안 리팩토링</option>
+        <option value="dashboard-perf">대시보드 렌더링 최적화</option>
+      </select>
+
+      <!-- Speed Selector -->
+      <button id="speed-btn" type="button" class="px-2.5 py-1.5 rounded-lg text-xs font-medium bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 transition flex items-center gap-1" title="응답 속도 전환">
+        <i data-lucide="gauge" class="w-3.5 h-3.5"></i>
+        <span id="speed-label">1x</span>
+      </button>
+
+      <!-- Auto Play / Pause -->
+      <button id="toggle-auto-btn" type="button" class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-indigo-600 hover:bg-indigo-500 text-white transition flex items-center gap-1.5 shadow-sm shadow-indigo-500/30">
+        <i id="auto-icon" data-lucide="play" class="w-3.5 h-3.5"></i>
+        <span id="auto-label">자동 협업 시작</span>
+      </button>
+
+      <!-- Next Step -->
+      <button id="step-btn" type="button" class="px-2.5 py-1.5 rounded-lg text-xs font-medium bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 transition flex items-center gap-1" title="다음 에이전트 턴 실행">
+        <i data-lucide="step-forward" class="w-3.5 h-3.5"></i>
+        <span class="hidden sm:inline">1턴 진행</span>
+      </button>
+
+      <!-- New Mission Modal Trigger -->
+      <button id="new-mission-btn" type="button" class="px-2.5 py-1.5 rounded-lg text-xs font-medium bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/30 text-emerald-300 transition flex items-center gap-1">
+        <i data-lucide="plus" class="w-3.5 h-3.5"></i>
+        <span class="hidden sm:inline">새 미션</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- Mobile View Switcher -->
+  <nav class="lg:hidden border-b border-slate-800 bg-slate-900 flex shrink-0">
+    <button type="button" data-mobile-tab="agents" class="mobile-tab-btn flex-1 py-2 text-xs font-medium text-slate-400 border-b-2 border-transparent">
+      에이전트 (<span id="mobile-agent-count">3</span>)
+    </button>
+    <button type="button" data-mobile-tab="chat" class="mobile-tab-btn flex-1 py-2 text-xs font-semibold text-indigo-400 border-b-2 border-indigo-500">
+      협업 대화
+    </button>
+    <button type="button" data-mobile-tab="workspace" class="mobile-tab-btn flex-1 py-2 text-xs font-medium text-slate-400 border-b-2 border-transparent">
+      태스크 · 산출물 (<span id="mobile-task-count">4</span>)
+    </button>
+  </nav>
+
+  <!-- Main 3-Column Workspace -->
+  <main class="flex-1 flex overflow-hidden min-h-0">
+
+    <!-- Left Panel: Agents -->
+    <aside id="panel-agents" class="hidden lg:flex lg:w-72 xl:w-80 flex-col border-r border-slate-800 bg-slate-900/50 shrink-0 min-h-0">
+      <div class="px-4 py-3 border-b border-slate-800 flex items-center justify-between">
+        <div class="flex items-center gap-2">
+          <i data-lucide="bot" class="w-4 h-4 text-indigo-400"></i>
+          <h2 class="text-xs font-semibold uppercase tracking-wider text-slate-300">참여 에이전트</h2>
+        </div>
+        <button id="add-agent-btn" type="button" class="text-xs text-indigo-400 hover:text-indigo-300 flex items-center gap-1 font-medium">
+          <i data-lucide="user-plus" class="w-3.5 h-3.5"></i> 추가
+        </button>
+      </div>
+
+      <div id="agent-list" class="flex-1 overflow-y-auto scrollbar-thin p-3 space-y-2.5">
+        <!-- Rendered by JS -->
+      </div>
+
+      <!-- Collaboration Mode Card -->
+      <div class="p-3 border-t border-slate-800 bg-slate-900/80 space-y-2">
+        <div class="flex items-center justify-between text-xs">
+          <span class="text-slate-400 font-medium">협업 모드</span>
+          <span id="round-counter" class="text-indigo-400 font-semibold">라운드 1</span>
+        </div>
+        <div class="grid grid-cols-3 gap-1 bg-slate-950 p-1 rounded-lg border border-slate-800">
+          <button type="button" data-mode="relay" class="mode-btn py-1 rounded text-[11px] font-medium bg-indigo-600 text-white">순차 릴레이</button>
+          <button type="button" data-mode="debate" class="mode-btn py-1 rounded text-[11px] font-medium text-slate-400 hover:text-slate-200">자유 토론</button>
+          <button type="button" data-mode="review" class="mode-btn py-1 rounded text-[11px] font-medium text-slate-400 hover:text-slate-200">코드 리뷰</button>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Center Panel: Live Conversation -->
+    <section id="panel-chat" class="flex-1 flex flex-col min-w-0 bg-slate-950 min-h-0">
+      <!-- Chat Subheader -->
+      <div class="px-4 py-2.5 border-b border-slate-800/80 bg-slate-900/30 flex items-center justify-between gap-2 shrink-0">
+        <div class="flex items-center gap-2 min-w-0">
+          <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0"></span>
+          <span class="text-xs font-medium text-slate-300 truncate">에이전트 실시간 협업 채널</span>
+          <span id="msg-count-badge" class="text-[11px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-400">0 메시지</span>
+        </div>
+        <div class="flex items-center gap-1.5">
+          <button id="filter-all-btn" type="button" class="chat-filter-btn px-2 py-1 rounded text-[11px] font-medium bg-slate-800 text-white">전체</button>
+          <button id="filter-code-btn" type="button" class="chat-filter-btn px-2 py-1 rounded text-[11px] font-medium text-slate-400 hover:text-slate-200">코드만</button>
+          <button id="clear-chat-btn" type="button" class="p-1.5 rounded text-slate-400 hover:text-rose-400 hover:bg-slate-800 transition" title="대화 초기화">
+            <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+          </button>
+        </div>
+      </div>
+
+      <!-- Messages Feed -->
+      <div id="chat-feed" class="flex-1 overflow-y-auto scrollbar-thin p-4 space-y-4">
+        <!-- Rendered by JS -->
+      </div>
+
+      <!-- Typing Indicator -->
+      <div id="typing-bar" class="hidden px-4 py-2 border-t border-slate-800/50 bg-slate-900/40 flex items-center gap-2 text-xs text-slate-400 shrink-0">
+        <span id="typing-avatar" class="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold"></span>
+        <span id="typing-text">에이전트가 응답을 작성 중입니다</span>
+        <span class="flex items-center gap-0.5">
+          <span class="w-1.5 h-1.5 rounded-full bg-indigo-400 typing-dot"></span>
+          <span class="w-1.5 h-1.5 rounded-full bg-indigo-400 typing-dot"></span>
+          <span class="w-1.5 h-1.5 rounded-full bg-indigo-400 typing-dot"></span>
+        </span>
+      </div>
+
+      <!-- User Intervention Input -->
+      <div class="p-3 border-t border-slate-800 bg-slate-900/70 shrink-0">
+        <div class="flex items-center gap-1.5 mb-2 overflow-x-auto pb-0.5">
+          <span class="text-[11px] text-slate-500 shrink-0">멘션:</span>
+          <button type="button" data-mention="@전체" class="mention-chip px-2 py-0.5 rounded-full text-[11px] bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 shrink-0">@전체</button>
+          <button type="button" data-mention="@파클" class="mention-chip px-2 py-0.5 rounded-full text-[11px] bg-violet-500/15 hover:bg-violet-500/25 text-violet-300 border border-violet-500/30 shrink-0">@파클</button>
+          <button type="button" data-mention="@코덱스" class="mention-chip px-2 py-0.5 rounded-full text-[11px] bg-sky-500/15 hover:bg-sky-500/25 text-sky-300 border border-sky-500/30 shrink-0">@코덱스</button>
+          <button type="button" data-mention="@태스크" class="mention-chip px-2 py-0.5 rounded-full text-[11px] bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/30 shrink-0">@태스크</button>
+          <span class="text-slate-700">|</span>
+          <button type="button" data-quick="보안 및 엣지 케이스를 점검해줘" class="quick-prompt-chip px-2 py-0.5 rounded-full text-[11px] bg-slate-800 hover:bg-slate-700 text-slate-300 shrink-0">보안 점검 요청</button>
+          <button type="button" data-quick="테스트 코드를 작성하고 태스크를 완료 처리해줘" class="quick-prompt-chip px-2 py-0.5 rounded-full text-[11px] bg-slate-800 hover:bg-slate-700 text-slate-300 shrink-0">테스트 작성 지시</button>
+        </div>
+        <form id="user-chat-form" class="flex gap-2">
+          <input id="user-chat-input" type="text" placeholder="에이전트들에게 지시하거나 @파클 @코덱스 @태스크 를 멘션하세요..." class="flex-1 bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2 text-xs sm:text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+          <button type="submit" class="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs sm:text-sm font-semibold transition flex items-center gap-1.5 shrink-0">
+            <span>전송</span>
+            <i data-lucide="send" class="w-3.5 h-3.5"></i>
+          </button>
+        </form>
+      </div>
+    </section>
+
+    <!-- Right Panel: Tasks & Artifacts -->
+    <aside id="panel-workspace" class="hidden lg:flex lg:w-80 xl:w-96 flex-col border-l border-slate-800 bg-slate-900/50 shrink-0 min-h-0">
+      <div class="border-b border-slate-800 flex shrink-0">
+        <button type="button" data-right-tab="tasks" class="right-tab-btn flex-1 py-3 text-xs font-semibold text-indigo-400 border-b-2 border-indigo-500 flex items-center justify-center gap-1.5">
+          <i data-lucide="check-square" class="w-3.5 h-3.5"></i>
+          <span>태스크 보드</span>
+        </button>
+        <button type="button" data-right-tab="artifacts" class="right-tab-btn flex-1 py-3 text-xs font-medium text-slate-400 border-b-2 border-transparent hover:text-slate-200 flex items-center justify-center gap-1.5">
+          <i data-lucide="file-code-2" class="w-3.5 h-3.5"></i>
+          <span>산출물 (<span id="artifact-count">1</span>)</span>
+        </button>
+        <button type="button" data-right-tab="metrics" class="right-tab-btn flex-1 py-3 text-xs font-medium text-slate-400 border-b-2 border-transparent hover:text-slate-200 flex items-center justify-center gap-1.5">
+          <i data-lucide="bar-chart-3" class="w-3.5 h-3.5"></i>
+          <span>협업 지표</span>
+        </button>
+      </div>
+
+      <!-- Tasks Tab Content -->
+      <div id="tab-tasks" class="flex-1 flex flex-col min-h-0">
+        <div class="p-3 border-b border-slate-800/70 flex items-center justify-between gap-2">
+          <div class="flex items-center gap-1.5 text-xs text-slate-400">
+            <span>진행률</span>
+            <span id="task-progress-text" class="font-semibold text-emerald-400">0%</span>
+          </div>
+          <button id="add-task-btn" type="button" class="px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs text-slate-200 border border-slate-700 flex items-center gap-1">
+            <i data-lucide="plus" class="w-3 h-3"></i> 태스크 추가
+          </button>
+        </div>
+        <div class="px-3 pt-2">
+          <div class="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
+            <div id="task-progress-bar" class="h-full bg-gradient-to-r from-indigo-500 to-emerald-500 transition-all duration-300" style="width: 0%"></div>
+          </div>
+        </div>
+        <div id="task-list" class="flex-1 overflow-y-auto scrollbar-thin p-3 space-y-2.5">
+          <!-- Rendered by JS -->
+        </div>
+      </div>
+
+      <!-- Artifacts Tab Content -->
+      <div id="tab-artifacts" class="hidden flex-1 flex-col min-h-0">
+        <div id="artifact-list" class="flex-1 overflow-y-auto scrollbar-thin p-3 space-y-3">
+          <!-- Rendered by JS -->
+        </div>
+      </div>
+
+      <!-- Metrics Tab Content -->
+      <div id="tab-metrics" class="hidden flex-1 flex-col overflow-y-auto scrollbar-thin p-4 space-y-4">
+        <div class="grid grid-cols-2 gap-2.5">
+          <div class="p-3 rounded-xl bg-slate-900 border border-slate-800">
+            <p class="text-[11px] text-slate-400">총 협업 메시지</p>
+            <p id="metric-total-msgs" class="text-xl font-bold text-white mt-0.5">0</p>
+          </div>
+          <div class="p-3 rounded-xl bg-slate-900 border border-slate-800">
+            <p class="text-[11px] text-slate-400">완료된 태스크</p>
+            <p id="metric-done-tasks" class="text-xl font-bold text-emerald-400 mt-0.5">0 / 0</p>
+          </div>
+        </div>
+        <div class="p-3.5 rounded-xl bg-slate-900 border border-slate-800 space-y-3">
+          <h3 class="text-xs font-semibold text-slate-300">에이전트별 협업 기여도</h3>
+          <div id="metric-agent-bars" class="space-y-2.5">
+            <!-- Rendered by JS -->
+          </div>
+        </div>
+        <div class="p-3.5 rounded-xl bg-slate-900 border border-slate-800 space-y-2">
+          <h3 class="text-xs font-semibold text-slate-300">협업 프로토콜 요약</h3>
+          <p class="text-xs text-slate-400 leading-relaxed">
+            <strong class="text-violet-300">파클</strong>이 요구사항과 구조를 설계하면,
+            <strong class="text-sky-300">코덱스</strong>가 실제 코드를 구현하고,
+            <strong class="text-emerald-300">태스크</strong>가 작업 상태와 검증 체크리스트를 실시간으로 동기화합니다.
+          </p>
+        </div>
+      </div>
+    </aside>
+  </main>
+
+  <!-- Modal: New Mission / Add Agent / Add Task -->
+  <div id="modal-backdrop" class="hidden fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-md shadow-2xl overflow-hidden">
+      <div class="px-5 py-3.5 border-b border-slate-800 flex items-center justify-between">
+        <h3 id="modal-title" class="text-sm font-bold text-white">새 미션 시작</h3>
+        <button id="modal-close-btn" type="button" class="text-slate-400 hover:text-white">
+          <i data-lucide="x" class="w-4 h-4"></i>
+        </button>
+      </div>
+      <form id="modal-form" class="p-5 space-y-4">
+        <div id="modal-fields" class="space-y-3"></div>
+        <div class="flex justify-end gap-2 pt-2">
+          <button id="modal-cancel-btn" type="button" class="px-3.5 py-2 rounded-lg text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-300">취소</button>
+          <button type="submit" class="px-4 py-2 rounded-lg text-xs font-semibold bg-indigo-600 hover:bg-indigo-500 text-white">확인</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Toast Notification -->
+  <div id="toast" class="hidden fixed bottom-5 right-5 z-50 px-4 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-xs font-medium text-slate-100 shadow-xl flex items-center gap-2">
+    <i data-lucide="check-circle-2" class="w-4 h-4 text-emerald-400"></i>
+    <span id="toast-text">복사되었습니다</span>
+  </div>
+
+  <script>
+    // ---------- Initial Scenarios & State ----------
+    const SCENARIOS = {
+      'realtime-notify': {
+        title: '실시간 알림 마이크로서비스 설계 및 구현',
+        tasks: [
+          { id: 'T-101', title: 'WebSocket + Redis Pub/Sub 아키텍처 설계', assignee: '파클', status: 'done', priority: '높음' },
+          { id: 'T-102', title: '알림 브로커 서버 및 재연결 핸들러 구현', assignee: '코덱스', status: 'in_progress', priority: '높음' },
+          { id: 'T-103', title: '미수신 알림 큐잉 및 단위 테스트 검증', assignee: '태스크', status: 'todo', priority: '중간' },
+          { id: 'T-104', title: '부하 테스트 및 레이턴시 모니터링 추가', assignee: '코덱스', status: 'todo', priority: '보통' }
+        ],
+        messages: [
+          {
+            id: 'm1',
+            sender: '태스크',
+            time: '07:12',
+            text: '새 미션 [실시간 알림 마이크로서비스 설계 및 구현]을 시작합니다. @파클 아키텍처 초안을 잡아주세요. 관련 태스크 T-101을 활성화했습니다.',
+            tag: '오케스트레이션'
+          },
+          {
+            id: 'm2',
+            sender: '파클',
+            time: '07:13',
+            text: '다중 인스턴스 환경에서 알림 유실을 막기 위해 WebSocket 게이트웨이 앞에 Redis Pub/Sub을 두고, 오프라인 유저는 PostgreSQL 알림함에 저장하는 2계층 구조를 제안합니다. @코덱스 브로커 핸들러 구현 부탁해요.',
+            tag: '아키텍처'
+          },
+          {
+            id: 'm3',
+            sender: '코덱스',
+            time: '07:14',
+            text: '확인했습니다 @파클! 지수 백오프(Exponential Backoff) 재연결 로직을 포함한 Node.js 기반 NotificationBroker 클래스를 작성했습니다. @태스크 T-102 검토 부탁드립니다.',
+            tag: '코드 구현',
+            code: {
+              filename: 'notification-broker.ts',
+              lang: 'typescript',
+              content: `export class NotificationBroker {\n  private retries = 0;\n  constructor(private redisUrl: string) {}\n\n  async publish(userId: string, payload: Record<string, unknown>) {\n    const channel = \`notify:\${userId}\`;\n    return { channel, deliveredAt: Date.now(), payload };\n  }\n}`
+            }
+          }
+        ],
+        artifacts: [
+          {
+            id: 'art-1',
+            title: 'notification-broker.ts',
+            author: '코덱스',
+            updatedAt: '07:14',
+            content: `export class NotificationBroker {\n  private retries = 0;\n  constructor(private redisUrl: string) {}\n\n  async publish(userId: string, payload: Record<string, unknown>) {\n    const channel = \`notify:\${userId}\`;\n    return { channel, deliveredAt: Date.now(), payload };\n  }\n}`
+          }
+        ],
+        scriptedTurns: [
+          {
+            sender: '태스크',
+            text: '@코덱스 코드 확인 완료! T-102 상태를 검토(Review)로 옮기고, T-103 미수신 알림 큐잉 테스트를 준비합니다. @파클 장애 복구 시나리오도 검토해 주세요.',
+            tag: '태스크 동기화',
+            taskUpdate: { id: 'T-102', status: 'review' }
+          },
+          {
+            sender: '파클',
+            text: '좋은 지적입니다 @태스크. Redis 연결이 끊겼을 때 메모리 버퍼에 최대 500건까지 임시 보관 후 재전송하는 서킷 브레이커를 추가하면 안전합니다. @코덱스 패치 가능할까요?',
+            tag: '설계 보완'
+          },
+          {
+            sender: '코덱스',
+            text: '@파클 서킷 브레이커와 인메모리 fallback 큐를 반영했습니다! 이제 T-102 완료 처리해도 될 것 같습니다 @태스크.',
+            tag: '코드 개선',
+            code: {
+              filename: 'circuit-breaker.ts',
+              lang: 'typescript',
+              content: `export function withFallbackQueue<T>(queue: T[], item: T, limit = 500) {\n  if (queue.length >= limit) queue.shift();\n  queue.push(item);\n  return queue.length;\n}`
+            },
+            taskUpdate: { id: 'T-102', status: 'done' }
+          },
+          {
+            sender: '태스크',
+            text: 'T-102 완료 처리했습니다! 다음으로 T-103 단위 테스트 검증을 진행 중으로 전환합니다. @코덱스 @파클 엣지 케이스 체크리스트 확인해 주세요.',
+            tag: '진행률 업데이트',
+            taskUpdate: { id: 'T-103', status: 'in_progress' }
+          }
+        ]
+      },
+      'auth-refactor': {
+        title: 'JWT 인증 보안 리팩토링 및 Refresh Token 도입',
+        tasks: [
+          { id: 'T-201', title: '기존 JWT 만료 정책 및 취약점 진단', assignee: '파클', status: 'done', priority: '높음' },
+          { id: 'T-202', title: 'Refresh Token Rotation 미들웨어 구현', assignee: '코덱스', status: 'in_progress', priority: '높음' },
+          { id: 'T-203', title: '토큰 탈취 감지 통합 테스트 실행', assignee: '태스크', status: 'todo', priority: '중간' }
+        ],
+        messages: [
+          {
+            id: 'a1',
+            sender: '파클',
+            time: '07:10',
+            text: '기존 Access Token 유효기간이 24시간으로 너무 깁니다. 15분 단축 + HttpOnly Cookie 기반 Refresh Token Rotation으로 전환해야 합니다. @코덱스 @태스크',
+            tag: '보안 진단'
+          },
+          {
+            id: 'a2',
+            sender: '코덱스',
+            time: '07:12',
+            text: '@파클 동의합니다. 토큰 재사용 감지 시 해당 유저의 패밀리 토큰을 전부 무효화하는 verifyRefreshToken 미들웨어를 작성 중입니다.',
+            tag: '코드 구현'
+          }
+        ],
+        artifacts: [
+          {
+            id: 'art-auth',
+            title: 'auth-rotation.ts',
+            author: '코덱스',
+            updatedAt: '07:12',
+            content: `export async function rotateRefreshToken(tokenId: string, familyId: string) {\n  const isReused = await checkTokenReuse(tokenId);\n  if (isReused) {\n    await revokeTokenFamily(familyId);\n    throw new Error('TOKEN_REUSE_DETECTED');\n  }\n  return issueNewPair(familyId);\n}`
+          }
+        ],
+        scriptedTurns: [
+          {
+            sender: '태스크',
+            text: 'T-202 진행 상황을 반영했습니다. @코덱스 패밀리 토큰 폐기 시 감사 로그(Audit Log)도 함께 남기도록 T-203 체크리스트에 추가할게요.',
+            tag: '체크리스트',
+            taskUpdate: { id: 'T-202', status: 'review' }
+          },
+          {
+            sender: '파클',
+            text: '@코덱스 감사 로그에 IP와 User-Agent 해시를 포함하면 이상 징후 추적이 훨씬 쉬워집니다.',
+            tag: '보안 리뷰'
+          },
+          {
+            sender: '코덱스',
+            text: '감사 로그 필드 반영 완료! @태스크 T-202 완료 처리 및 T-203 테스트 실행 부탁합니다.',
+            tag: '구현 완료',
+            taskUpdate: { id: 'T-202', status: 'done' }
+          }
+        ]
+      },
+      'dashboard-perf': {
+        title: '대용량 데이터 대시보드 렌더링 최적화',
+        tasks: [
+          { id: 'T-301', title: '병목 컴포넌트 프로파일링 및 원인 분석', assignee: '파클', status: 'done', priority: '높음' },
+          { id: 'T-302', title: '가상 스크롤(Virtual List) 및 메모이제이션 적용', assignee: '코덱스', status: 'in_progress', priority: '높음' },
+          { id: 'T-303', title: 'FPS 및 초기 로딩 속도 벤치마크 검증', assignee: '태스크', status: 'todo', priority: '중간' }
+        ],
+        messages: [
+          {
+            id: 'd1',
+            sender: '파클',
+            time: '07:08',
+            text: '10,000개 행 테이블이 한 번에 DOM에 마운트되어 초기 렌더링이 2.4초 걸립니다. @코덱스 가상 스크롤 적용이 필요합니다.',
+            tag: '성능 분석'
+          }
+        ],
+        artifacts: [
+          {
+            id: 'art-perf',
+            title: 'virtual-window.ts',
+            author: '코덱스',
+            updatedAt: '07:09',
+            content: `export function getVisibleRange(scrollTop: number, rowHeight: number, viewportHeight: number) {\n  const start = Math.max(0, Math.floor(scrollTop / rowHeight) - 5);\n  const end = Math.ceil((scrollTop + viewportHeight) / rowHeight) + 5;\n  return { start, end };\n}`
+          }
+        ],
+        scriptedTurns: [
+          {
+            sender: '코덱스',
+            text: '@파클 오버스캔 5행 버퍼를 둔 `getVisibleRange` 유틸리티를 적용해 DOM 노드를 10,000개에서 28개로 줄였습니다!',
+            tag: '성능 개선',
+            taskUpdate: { id: 'T-302', status: 'done' }
+          },
+          {
+            sender: '태스크',
+            text: 'T-302 완료 확인! T-303 벤치마크를 시작합니다. 초기 렌더링 시간이 2.4s -> 0.18s로 단축되었습니다.',
+            tag: '벤치마크',
+            taskUpdate: { id: 'T-303', status: 'done' }
+          }
+        ]
+      }
+    };
+
+    const DEFAULT_AGENTS = [
+      {
+        id: '파클',
+        name: '파클',
+        subtitle: 'PaCl · 아키텍트/기획',
+        role: '설계 및 리뷰',
+        color: 'violet',
+        badgeClass: 'bg-violet-500/15 text-violet-300 border-violet-500/30',
+        avatarClass: 'bg-violet-600 text-white',
+        barClass: 'bg-violet-500',
+        status: '대기 중',
+        active: true
+      },
+      {
+        id: '코덱스',
+        name: '코덱스',
+        subtitle: 'Codex · 코드 구현',
+        role: '코드 생성/리팩토링',
+        color: 'sky',
+        badgeClass: 'bg-sky-500/15 text-sky-300 border-sky-500/30',
+        avatarClass: 'bg-sky-600 text-white',
+        barClass: 'bg-sky-500',
+        status: '대기 중',
+        active: true
+      },
+      {
+        id: '태스크',
+        name: '태스크',
+        subtitle: 'Task · 오케스트레이터',
+        role: '작업 분해/상태 추적',
+        color: 'emerald',
+        badgeClass: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30',
+        avatarClass: 'bg-emerald-600 text-white',
+        barClass: 'bg-emerald-500',
+        status: '대기 중',
+        active: true
+      }
+    ];
+
+    let state = {
+      scenarioKey: 'realtime-notify',
+      missionTitle: SCENARIOS['realtime-notify'].title,
+      agents: JSON.parse(JSON.stringify(DEFAULT_AGENTS)),
+      messages: JSON.parse(JSON.stringify(SCENARIOS['realtime-notify'].messages)),
+      tasks: JSON.parse(JSON.stringify(SCENARIOS['realtime-notify'].tasks)),
+      artifacts: JSON.parse(JSON.stringify(SCENARIOS['realtime-notify'].artifacts)),
+      scriptIndex: 0,
+      round: 1,
+      mode: 'relay',
+      autoPlay: false,
+      speedMultiplier: 1,
+      chatFilter: 'all',
+      rightTab: 'tasks',
+      mobileTab: 'chat',
+      modalMode: null
+    };
+
+    let autoTimer = null;
+    let typingTimer = null;
+
+    // ---------- Helpers ----------
+    function nowTime() {
+      const d = new Date();
+      return d.toTimeString().slice(0, 5);
+    }
+
+    function escapeHtml(str) {
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    function formatMentions(text) {
+      return escapeHtml(text).replace(/(@[가-힣a-zA-Z0-9_-]+)/g, '<span class="px-1 py-0.5 rounded bg-indigo-500/20 text-indigo-300 font-medium">$1</span>');
+    }
+
+    function showToast(msg) {
+      const toast = document.getElementById('toast');
+      document.getElementById('toast-text').textContent = msg;
+      toast.classList.remove('hidden');
+      clearTimeout(toast._t);
+      toast._t = setTimeout(() => toast.classList.add('hidden'), 2200);
+    }
+
+    function copyText(text) {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(() => showToast('클립보드에 복사되었습니다')).catch(() => fallbackCopy(text));
+      } else {
+        fallbackCopy(text);
+      }
+    }
+
+    function fallbackCopy(text) {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      document.body.appendChild(ta);
+      ta.select();
+      try {
+        document.execCommand('copy');
+        showToast('클립보드에 복사되었습니다');
+      } catch (e) {
+        showToast('복사에 실패했습니다');
+      }
+      document.body.removeChild(ta);
+    }
+
+    // ---------- Rendering ----------
+    function renderAll() {
+      renderHeader();
+      renderAgents();
+      renderMessages();
+      renderTasks();
+      renderArtifacts();
+      renderMetrics();
+      if (window.lucide) lucide.createIcons();
+    }
+
+    function renderHeader() {
+      document.getElementById('mission-subtitle').textContent = `미션: ${state.missionTitle}`;
+      document.getElementById('round-counter').textContent = `라운드 ${state.round}`;
+      document.getElementById('speed-label').textContent = `${state.speedMultiplier}x`;
+      const autoBtn = document.getElementById('toggle-auto-btn');
+      const autoLabel = document.getElementById('auto-label');
+      const autoIcon = document.getElementById('auto-icon');
+      if (state.autoPlay) {
+        autoBtn.classList.remove('bg-indigo-600', 'hover:bg-indigo-500');
+        autoBtn.classList.add('bg-amber-600', 'hover:bg-amber-500');
+        autoLabel.textContent = '일시정지';
+        autoIcon.setAttribute('data-lucide', 'pause');
+      } else {
+        autoBtn.classList.remove('bg-amber-600', 'hover:bg-amber-500');
+        autoBtn.classList.add('bg-indigo-600', 'hover:bg-indigo-500');
+        autoLabel.textContent = '자동 협업 시작';
+        autoIcon.setAttribute('data-lucide', 'play');
+      }
+    }
+
+    function renderAgents() {
+      const list = document.getElementById('agent-list');
+      document.getElementById('mobile-agent-count').textContent = state.agents.length;
+      list.innerHTML = state.agents.map(agent => {
+        const msgCount = state.messages.filter(m => m.sender === agent.id).length;
+        return `
+          <div class="p-3 rounded-xl border ${agent.active ? 'border-slate-800 bg-slate-900/90' : 'border-slate-800/40 bg-slate-900/30 opacity-60'} transition">
+            <div class="flex items-start justify-between gap-2">
+              <div class="flex items-center gap-2.5 min-w-0">
+                <div class="w-9 h-9 rounded-xl ${agent.avatarClass} flex items-center justify-center font-bold text-sm shrink-0 shadow-sm">
+                  ${escapeHtml(agent.name.slice(0, 1))}
+                </div>
+                <div class="min-w-0">
+                  <div class="flex items-center gap-1.5">
+                    <span class="text-sm font-bold text-white truncate">${escapeHtml(agent.name)}</span>
+                    <span class="text-[10px] px-1.5 py-0.5 rounded-full border ${agent.badgeClass}">${escapeHtml(agent.role)}</span>
+                  </div>
+                  <p class="text-[11px] text-slate-400 truncate">${escapeHtml(agent.subtitle)}</p>
+                </div>
+              </div>
+              <button type="button" data-toggle-agent="${escapeHtml(agent.id)}" class="text-[11px] px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 shrink-0">
+                ${agent.active ? '활성' : '휴식'}
+              </button>
+            </div>
+            <div class="mt-2.5 pt-2 border-t border-slate-800/80 flex items-center justify-between text-[11px]">
+              <span class="text-slate-400 flex items-center gap-1">
+                <span class="w-1.5 h-1.5 rounded-full ${agent.status === '작성 중...' ? 'bg-amber-400 animate-ping' : 'bg-emerald-400'}"></span>
+                ${escapeHtml(agent.status)}
+              </span>
+              <div class="flex items-center gap-2">
+                <span class="text-slate-500">발언 ${msgCount}회</span>
+                <button type="button" data-ping-agent="${escapeHtml(agent.id)}" class="text-indigo-400 hover:text-indigo-300 font-medium">@호출</button>
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function renderMessages() {
+      const feed = document.getElementById('chat-feed');
+      const filtered = state.chatFilter === 'code'
+        ? state.messages.filter(m => Boolean(m.code))
+        : state.messages;
+
+      document.getElementById('msg-count-badge').textContent = `${state.messages.length} 메시지`;
+
+      if (filtered.length === 0) {
+        feed.innerHTML = `
+          <div class="h-full flex flex-col items-center justify-center text-center py-12 text-slate-500">
+            <i data-lucide="message-square-dashed" class="w-8 h-8 mb-2 opacity-50"></i>
+            <p class="text-xs">표시할 메시지가 없습니다.</p>
+          </div>`;
+        return;
+      }
+
+      feed.innerHTML = filtered.map(msg => {
+        const isUser = msg.sender === '사용자';
+        const agent = state.agents.find(a => a.id === msg.sender);
+        const avatarBg = isUser ? 'bg-indigo-600 text-white' : (agent ? agent.avatarClass : 'bg-slate-700 text-white');
+        const badgeCls = isUser ? 'bg-indigo-500/15 text-indigo-300 border-indigo-500/30' : (agent ? agent.badgeClass : 'bg-slate-800 text-slate-300 border-slate-700');
+
+        const codeBlock = msg.code ? `
+          <div class="mt-2.5 rounded-xl overflow-hidden border border-slate-800 bg-slate-950">
+            <div class="px-3 py-1.5 bg-slate-900 border-b border-slate-800 flex items-center justify-between text-[11px] text-slate-400">
+              <span class="font-mono text-slate-300">${escapeHtml(msg.code.filename)}</span>
+              <button type="button" data-copy-msg="${escapeHtml(msg.id)}" class="hover:text-white flex items-center gap-1">
+                <i data-lucide="copy" class="w-3 h-3"></i> 복사
+              </button>
+            </div>
+            <pre class="p-3 text-xs text-sky-200 overflow-x-auto leading-relaxed"><code>${escapeHtml(msg.code.content)}</code></pre>
+          </div>
+        ` : '';
+
+        return `
+          <div class="flex items-start gap-3 ${isUser ? 'flex-row-reverse' : ''}">
+            <div class="w-8 h-8 rounded-xl ${avatarBg} flex items-center justify-center font-bold text-xs shrink-0 mt-0.5">
+              ${escapeHtml(msg.sender.slice(0, 1))}
+            </div>
+            <div class="max-w-[85%] sm:max-w-[78%] ${isUser ? 'items-end' : 'items-start'} flex flex-col">
+              <div class="flex items-center gap-2 mb-1 ${isUser ? 'flex-row-reverse' : ''}">
+                <span class="text-xs font-bold text-slate-200">${escapeHtml(msg.sender)}</span>
+                ${msg.tag ? `<span class="text-[10px] px-1.5 py-0.5 rounded border ${badgeCls}">${escapeHtml(msg.tag)}</span>` : ''}
+                <span class="text-[10px] text-slate-500">${escapeHtml(msg.time)}</span>
+              </div>
+              <div class="px-3.5 py-2.5 rounded-2xl text-xs sm:text-[13px] leading-relaxed ${isUser ? 'bg-indigo-600/25 border border-indigo-500/40 text-slate-100 rounded-tr-sm' : 'bg-slate-900 border border-slate-800 text-slate-200 rounded-tl-sm'} w-full">
+                <p>${formatMentions(msg.text)}</p>
+                ${codeBlock}
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      feed.scrollTop = feed.scrollHeight;
+    }
+
+    function renderTasks() {
+      const list = document.getElementById('task-list');
+      const total = state.tasks.length;
+      const done = state.tasks.filter(t => t.status === 'done').length;
+      const pct = total === 0 ? 0 : Math.round((done / total) * 100);
+
+      document.getElementById('mobile-task-count').textContent = total;
+      document.getElementById('task-progress-text').textContent = `${pct}% (${done}/${total})`;
+      document.getElementById('task-progress-bar').style.width = `${pct}%`;
+
+      const statusMeta = {
+        todo: { label: '할 일', cls: 'bg-slate-800 text-slate-300 border-slate-700', next: 'in_progress' },
+        in_progress: { label: '진행 중', cls: 'bg-sky-500/15 text-sky-300 border-sky-500/30', next: 'review' },
+        review: { label: '검토 중', cls: 'bg-amber-500/15 text-amber-300 border-amber-500/30', next: 'done' },
+        done: { label: '완료', cls: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30', next: 'todo' }
+      };
+
+      list.innerHTML = state.tasks.map(task => {
+        const meta = statusMeta[task.status] || statusMeta.todo;
+        const agent = state.agents.find(a => a.id === task.assignee);
+        const assigneeCls = agent ? agent.badgeClass : 'bg-slate-800 text-slate-300 border-slate-700';
+        return `
+          <div class="p-3 rounded-xl bg-slate-900 border border-slate-800 hover:border-slate-700 transition space-y-2">
+            <div class="flex items-center justify-between gap-2">
+              <span class="text-[11px] font-mono text-slate-500">${escapeHtml(task.id)}</span>
+              <button type="button" data-cycle-task="${escapeHtml(task.id)}" class="text-[10px] px-2 py-0.5 rounded-full border font-medium ${meta.cls} hover:opacity-80 transition" title="클릭하여 상태 변경">
+                ${meta.label}
+              </button>
+            </div>
+            <p class="text-xs font-medium text-slate-200 leading-snug ${task.status === 'done' ? 'line-through text-slate-500' : ''}">
+              ${escapeHtml(task.title)}
+            </p>
+            <div class="flex items-center justify-between pt-1 text-[11px]">
+              <span class="px-1.5 py-0.5 rounded border ${assigneeCls}">담당: ${escapeHtml(task.assignee)}</span>
+              <span class="text-slate-500">우선순위: ${escapeHtml(task.priority)}</span>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function renderArtifacts() {
+      const container = document.getElementById('artifact-list');
+      document.getElementById('artifact-count').textContent = state.artifacts.length;
+
+      if (state.artifacts.length === 0) {
+        container.innerHTML = `<p class="text-xs text-slate-500 text-center py-8">아직 생성된 산출물이 없습니다.</p>`;
+        return;
+      }
+
+      container.innerHTML = state.artifacts.map(art => `
+        <div class="rounded-xl border border-slate-800 bg-slate-900 overflow-hidden">
+          <div class="px-3 py-2 bg-slate-900/90 border-b border-slate-800 flex items-center justify-between">
+            <div class="min-w-0">
+              <p class="text-xs font-mono font-semibold text-sky-300 truncate">${escapeHtml(art.title)}</p>
+              <p class="text-[10px] text-slate-500">${escapeHtml(art.author)} · ${escapeHtml(art.updatedAt)}</p>
+            </div>
+            <button type="button" data-copy-artifact="${escapeHtml(art.id)}" class="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-[11px] text-slate-300 flex items-center gap-1 shrink-0">
+              <i data-lucide="copy" class="w-3 h-3"></i> 복사
+            </button>
+          </div>
+          <pre class="p-3 text-[11px] text-slate-300 bg-slate-950 overflow-x-auto leading-relaxed"><code>${escapeHtml(art.content)}</code></pre>
+        </div>
+      `).join('');
+    }
+
+    function renderMetrics() {
+      const totalMsgs = state.messages.length;
+      const doneTasks = state.tasks.filter(t => t.status === 'done').length;
+      document.getElementById('metric-total-msgs').textContent = totalMsgs;
+      document.getElementById('metric-done-tasks').textContent = `${doneTasks} / ${state.tasks.length}`;
+
+      const bars = document.getElementById('metric-agent-bars');
+      bars.innerHTML = state.agents.map(agent => {
+        const count = state.messages.filter(m => m.sender === agent.id).length;
+        const pct = totalMsgs === 0 ? 0 : Math.round((count / totalMsgs) * 100);
+        return `
+          <div class="space-y-1">
+            <div class="flex justify-between text-[11px]">
+              <span class="font-medium text-slate-300">${escapeHtml(agent.name)}</span>
+              <span class="text-slate-400">${count}건 (${pct}%)</span>
+            </div>
+            <div class="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
+              <div class="h-full ${agent.barClass} transition-all duration-300" style="width: ${pct}%"></div>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    // ---------- Collaboration Engine ----------
+    function setAgentTyping(agentId) {
+      const bar = document.getElementById('typing-bar');
+      const avatar = document.getElementById('typing-avatar');
+      const text = document.getElementById('typing-text');
+      const agent = state.agents.find(a => a.id === agentId);
+
+      state.agents.forEach(a => {
+        a.status = a.id === agentId ? '작성 중...' : '대기 중';
+      });
+      renderAgents();
+
+      if (agent) {
+        avatar.className = `w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${agent.avatarClass}`;
+        avatar.textContent = agent.name.slice(0, 1);
+        text.textContent = `${agent.name} 에이전트가 협업 응답을 생성 중입니다`;
+        bar.classList.remove('hidden');
+      }
+    }
+
+    function clearAgentTyping() {
+      state.agents.forEach(a => { a.status = '대기 중'; });
+      document.getElementById('typing-bar').classList.add('hidden');
+      renderAgents();
+    }
+
+    function generateDynamicAgentTurn(userPrompt = '') {
+      const activeAgents = state.agents.filter(a => a.active);
+      if (activeAgents.length === 0) return null;
+
+      // Pick target agent from @mention or mode rotation
+      let chosen = null;
+      if (userPrompt) {
+        chosen = activeAgents.find(a => userPrompt.includes(`@${a.id}`));
+      }
+      if (!chosen) {
+        const lastMsg = state.messages[state.messages.length - 1];
+        const idx = lastMsg ? activeAgents.findIndex(a => a.id === lastMsg.sender) : -1;
+        chosen = activeAgents[(idx + 1) % activeAgents.length];
+      }
+
+      const modePrefix = state.mode === 'debate'
+        ? '다른 관점에서 검토해 보면, '
+        : state.mode === 'review'
+        ? '[코드 리뷰] '
+        : '';
+
+      if (userPrompt) {
+        const pendingTask = state.tasks.find(t => t.status !== 'done');
+        if (chosen.id === '파클') {
+          return {
+            sender: chosen.id,
+            tag: '요구사항 분석',
+            text: `${modePrefix}사용자 지시("${userPrompt.slice(0, 28)}")를 반영해 모듈 경계와 예외 처리 정책을 재정리했습니다. @코덱스 인터페이스 시그니처 업데이트 부탁해요.`
+          };
+        }
+        if (chosen.id === '코덱스') {
+          return {
+            sender: chosen.id,
+            tag: '코드 반영',
+            text: `${modePrefix}요청하신 내용을 코드에 반영했습니다. @태스크 검증 후 상태 업데이트 부탁드립니다.`,
+            code: {
+              filename: 'collab-handler.ts',
+              lang: 'typescript',
+              content: `export async function handleDirective(input: string) {\n  const sanitized = input.trim();\n  return { status: 'verified', directive: sanitized, ts: Date.now() };\n}`
+            }
+          };
+        }
+        return {
+          sender: chosen.id,
+          tag: '태스크 갱신',
+          text: `${modePrefix}지시사항을 태스크 보드에 반영했습니다.${pendingTask ? ` [${pendingTask.id}] 우선순위를 상향하고 진행 상태를 업데이트합니다.` : ' 모든 태스크가 최신 상태입니다.'}`,
+          taskUpdate: pendingTask ? { id: pendingTask.id, status: pendingTask.status === 'todo' ? 'in_progress' : 'done' } : null
+        };
+      }
+
+      // Check scripted turns first
+      const scenario = SCENARIOS[state.scenarioKey];
+      if (scenario && state.scriptIndex < scenario.scriptedTurns.length) {
+        const turn = scenario.scriptedTurns[state.scriptIndex];
+        state.scriptIndex += 1;
+        return turn;
+      }
+
+      // Continuous dynamic collaboration after scripted turns
+      const nextTask = state.tasks.find(t => t.status !== 'done');
+      if (chosen.id === '파클') {
+        return {
+          sender: '파클',
+          tag: '아키텍처 점검',
+          text: `${modePrefix}현재까지 구현된 모듈 간 결합도를 점검했습니다. @코덱스 ${nextTask ? `[${nextTask.id}]` : '다음 모듈'}의 에러 바운더리도 확인해 주세요.`
+        };
+      }
+      if (chosen.id === '코덱스') {
+        return {
+          sender: '코덱스',
+          tag: '테스트 보강',
+          text: `${modePrefix}@파클 피드백을 반영해 통합 테스트 케이스를 추가했습니다. @태스크 완료 체크 부탁합니다.`
+        };
+      }
+      return {
+        sender: '태스크',
+        tag: '상태 동기화',
+        text: `${modePrefix}@파클 @코덱스 협업 라운드 ${state.round} 결과를 기록했습니다.${nextTask ? ` ${nextTask.id} 작업을 완료 처리합니다.` : ' 모든 마일스톤이 완료되었습니다!'}`,
+        taskUpdate: nextTask ? { id: nextTask.id, status: 'done' } : null
+      };
+    }
+
+    function executeNextTurn(userPrompt = '') {
+      const turn = generateDynamicAgentTurn(userPrompt);
+      if (!turn) {
+        showToast('활성화된 에이전트가 없습니다');
+        stopAutoPlay();
+        return;
+      }
+
+      const delay = Math.round(900 / state.speedMultiplier);
+      setAgentTyping(turn.sender);
+
+      clearTimeout(typingTimer);
+      typingTimer = setTimeout(() => {
+        clearAgentTyping();
+        const newMsg = {
+          id: `m-${Date.now()}`,
+          sender: turn.sender,
+          time: nowTime(),
+          text: turn.text,
+          tag: turn.tag || '협업',
+          code: turn.code || null
+        };
+        state.messages.push(newMsg);
+
+        if (turn.code) {
+          state.artifacts.unshift({
+            id: `art-${Date.now()}`,
+            title: turn.code.filename,
+            author: turn.sender,
+            updatedAt: newMsg.time,
+            content: turn.code.content
+          });
+        }
+
+        if (turn.taskUpdate) {
+          const target = state.tasks.find(t => t.id === turn.taskUpdate.id);
+          if (target) target.status = turn.taskUpdate.status;
+        }
+
+        if (state.messages.length % 3 === 0) {
+          state.round += 1;
+        }
+
+        renderAll();
+      }, delay);
+    }
+
+    function startAutoPlay() {
+      if (state.autoPlay) return;
+      state.autoPlay = true;
+      renderHeader();
+      executeNextTurn();
+      const intervalMs = Math.round(2800 / state.speedMultiplier);
+      autoTimer = setInterval(() => {
+        executeNextTurn();
+      }, intervalMs);
+    }
+
+    function stopAutoPlay() {
+      state.autoPlay = false;
+      clearInterval(autoTimer);
+      autoTimer = null;
+      renderHeader();
+    }
+
+    function loadScenario(key) {
+      stopAutoPlay();
+      clearTimeout(typingTimer);
+      clearAgentTyping();
+      const sc = SCENARIOS[key];
+      state.scenarioKey = key;
+      state.missionTitle = sc.title;
+      state.tasks = JSON.parse(JSON.stringify(sc.tasks));
+      state.messages = JSON.parse(JSON.stringify(sc.messages));
+      state.artifacts = JSON.parse(JSON.stringify(sc.artifacts));
+      state.scriptIndex = 0;
+      state.round = 1;
+      renderAll();
+    }
+
+    // ---------- Modals ----------
+    function openModal(mode) {
+      state.modalMode = mode;
+      const backdrop = document.getElementById('modal-backdrop');
+      const title = document.getElementById('modal-title');
+      const fields = document.getElementById('modal-fields');
+
+      if (mode === 'mission') {
+        title.textContent = '새 협업 미션 시작';
+        fields.innerHTML = `
+          <div>
+            <label class="block text-xs font-medium text-slate-300 mb-1">미션 제목</label>
+            <input id="input-mission-title" type="text" required placeholder="예: 결제 웹훅 재시도 파이프라인 구축" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-slate-300 mb-1">초기 지시사항</label>
+            <textarea id="input-mission-prompt" rows="3" placeholder="에이전트들에게 전달할 목표를 입력하세요..." class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"></textarea>
+          </div>
+        `;
+      } else if (mode === 'agent') {
+        title.textContent = '새 에이전트 추가';
+        fields.innerHTML = `
+          <div>
+            <label class="block text-xs font-medium text-slate-300 mb-1">에이전트 이름</label>
+            <input id="input-agent-name" type="text" required placeholder="예: 시큐리티" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-slate-300 mb-1">역할</label>
+            <input id="input-agent-role" type="text" required placeholder="예: 보안 취약점 감사" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+          </div>
+        `;
+      } else if (mode === 'task') {
+        title.textContent = '새 태스크 추가';
+        const options = state.agents.map(a => `<option value="${escapeHtml(a.id)}">${escapeHtml(a.name)}</option>`).join('');
+        fields.innerHTML = `
+          <div>
+            <label class="block text-xs font-medium text-slate-300 mb-1">태스크 내용</label>
+            <input id="input-task-title" type="text" required placeholder="예: API 응답 스키마 검증 추가" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+          </div>
+          <div class="grid grid-cols-2 gap-2">
+            <div>
+              <label class="block text-xs font-medium text-slate-300 mb-1">담당 에이전트</label>
+              <select id="input-task-assignee" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white">${options}</select>
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-slate-300 mb-1">우선순위</label>
+              <select id="input-task-priority" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white">
+                <option value="높음">높음</option>
+                <option value="중간" selected>중간</option>
+                <option value="보통">보통</option>
+              </select>
+            </div>
+          </div>
+        `;
+      }
+      backdrop.classList.remove('hidden');
+    }
+
+    function closeModal() {
+      document.getElementById('modal-backdrop').classList.add('hidden');
+      state.modalMode = null;
+    }
+
+    // ---------- Event Listeners ----------
+    document.getElementById('scenario-select').addEventListener('change', e => {
+      loadScenario(e.target.value);
+      showToast('시나리오가 전환되었습니다');
+    });
+
+    document.getElementById('speed-btn').addEventListener('click', () => {
+      const speeds = [1, 2, 4];
+      const next = speeds[(speeds.indexOf(state.speedMultiplier) + 1) % speeds.length];
+      state.speedMultiplier = next;
+      if (state.autoPlay) {
+        stopAutoPlay();
+        startAutoPlay();
+      } else {
+        renderHeader();
+      }
+    });
+
+    document.getElementById('toggle-auto-btn').addEventListener('click', () => {
+      if (state.autoPlay) stopAutoPlay();
+      else startAutoPlay();
+    });
+
+    document.getElementById('step-btn').addEventListener('click', () => {
+      executeNextTurn();
+    });
+
+    document.getElementById('new-mission-btn').addEventListener('click', () => openModal('mission'));
+    document.getElementById('add-agent-btn').addEventListener('click', () => openModal('agent'));
+    document.getElementById('add-task-btn').addEventListener('click', () => openModal('task'));
+    document.getElementById('modal-close-btn').addEventListener('click', closeModal);
+    document.getElementById('modal-cancel-btn').addEventListener('click', closeModal);
+
+    document.getElementById('modal-form').addEventListener('submit', e => {
+      e.preventDefault();
+      if (state.modalMode === 'mission') {
+        const title = document.getElementById('input-mission-title').value.trim();
+        const prompt = document.getElementById('input-mission-prompt').value.trim();
+        if (!title) return;
+        stopAutoPlay();
+        state.missionTitle = title;
+        state.messages = [{
+          id: `m-${Date.now()}`,
+          sender: '태스크',
+          time: nowTime(),
+          tag: '미션 시작',
+          text: `새 미션 [${title}]이 시작되었습니다. ${prompt ? `초기 지시: ${prompt}` : '@파클 @코덱스 협업을 시작해 주세요.'}`
+        }];
+        state.tasks = [
+          { id: 'T-001', title: `${title} 요구사항 분석`, assignee: '파클', status: 'in_progress', priority: '높음' },
+          { id: 'T-002', title: '핵심 로직 구현 및 코드 작성', assignee: '코덱스', status: 'todo', priority: '높음' },
+          { id: 'T-003', title: '검증 및 테스트 완료', assignee: '태스크', status: 'todo', priority: '중간' }
+        ];
+        state.artifacts = [];
+        state.scriptIndex = 999;
+        state.round = 1;
+        renderAll();
+        closeModal();
+        showToast('새 협업 미션이 생성되었습니다');
+      } else if (state.modalMode === 'agent') {
+        const name = document.getElementById('input-agent-name').value.trim();
+        const role = document.getElementById('input-agent-role').value.trim();
+        if (!name || !role) return;
+        state.agents.push({
+          id: name,
+          name,
+          subtitle: `${name} · 커스텀 에이전트`,
+          role,
+          color: 'amber',
+          badgeClass: 'bg-amber-500/15 text-amber-300 border-amber-500/30',
+          avatarClass: 'bg-amber-600 text-white',
+          barClass: 'bg-amber-500',
+          status: '대기 중',
+          active: true
+        });
+        renderAll();
+        closeModal();
+        showToast(`${name} 에이전트가 합류했습니다`);
+      } else if (state.modalMode === 'task') {
+        const title = document.getElementById('input-task-title').value.trim();
+        const assignee = document.getElementById('input-task-assignee').value;
+        const priority = document.getElementById('input-task-priority').value;
+        if (!title) return;
+        const id = `T-${Math.floor(400 + Math.random() * 500)}`;
+        state.tasks.unshift({ id, title, assignee, status: 'todo', priority });
+        renderAll();
+        closeModal();
+        showToast(`태스크 ${id}가 추가되었습니다`);
+      }
+    });
+
+    // User Chat Form
+    document.getElementById('user-chat-form').addEventListener('submit', e => {
+      e.preventDefault();
+      const input = document.getElementById('user-chat-input');
+      const text = input.value.trim();
+      if (!text) return;
+      state.messages.push({
+        id: `u-${Date.now()}`,
+        sender: '사용자',
+        time: nowTime(),
+        tag: '지시사항',
+        text
+      });
+      input.value = '';
+      renderAll();
+      executeNextTurn(text);
+    });
+
+    // Mention & Quick Prompt Chips
+    document.querySelectorAll('.mention-chip').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const input = document.getElementById('user-chat-input');
+        const m = btn.getAttribute('data-mention');
+        input.value = `${input.value ? input.value + ' ' : ''}${m} `;
+        input.focus();
+      });
+    });
+
+    document.querySelectorAll('.quick-prompt-chip').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const input = document.getElementById('user-chat-input');
+        input.value = btn.getAttribute('data-quick');
+        input.focus();
+      });
+    });
+
+    // Collaboration Modes
+    document.querySelectorAll('.mode-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        state.mode = btn.getAttribute('data-mode');
+        document.querySelectorAll('.mode-btn').forEach(b => {
+          b.className = 'mode-btn py-1 rounded text-[11px] font-medium text-slate-400 hover:text-slate-200';
+        });
+        btn.className = 'mode-btn py-1 rounded text-[11px] font-medium bg-indigo-600 text-white';
+        showToast(`협업 모드 변경: ${btn.textContent}`);
+      });
+    });
+
+    // Chat Filters & Clear
+    document.getElementById('filter-all-btn').addEventListener('click', () => {
+      state.chatFilter = 'all';
+      document.getElementById('filter-all-btn').className = 'chat-filter-btn px-2 py-1 rounded text-[11px] font-medium bg-slate-800 text-white';
+      document.getElementById('filter-code-btn').className = 'chat-filter-btn px-2 py-1 rounded text-[11px] font-medium text-slate-400 hover:text-slate-200';
+      renderMessages();
+    });
+
+    document.getElementById('filter-code-btn').addEventListener('click', () => {
+      state.chatFilter = 'code';
+      document.getElementById('filter-code-btn').className = 'chat-filter-btn px-2 py-1 rounded text-[11px] font-medium bg-slate-800 text-white';
+      document.getElementById('filter-all-btn').className = 'chat-filter-btn px-2 py-1 rounded text-[11px] font-medium text-slate-400 hover:text-slate-200';
+      renderMessages();
+    });
+
+    document.getElementById('clear-chat-btn').addEventListener('click', () => {
+      stopAutoPlay();
+      state.messages = [];
+      state.round = 1;
+      renderAll();
+      showToast('대화 내용이 초기화되었습니다');
+    });
+
+    // Right Panel Tabs
+    document.querySelectorAll('.right-tab-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const target = btn.getAttribute('data-right-tab');
+        state.rightTab = target;
+        document.querySelectorAll('.right-tab-btn').forEach(b => {
+          b.className = 'right-tab-btn flex-1 py-3 text-xs font-medium text-slate-400 border-b-2 border-transparent hover:text-slate-200 flex items-center justify-center gap-1.5';
+        });
+        btn.className = 'right-tab-btn flex-1 py-3 text-xs font-semibold text-indigo-400 border-b-2 border-indigo-500 flex items-center justify-center gap-1.5';
+
+        document.getElementById('tab-tasks').classList.toggle('hidden', target !== 'tasks');
+        document.getElementById('tab-artifacts').classList.toggle('hidden', target !== 'artifacts');
+        document.getElementById('tab-metrics').classList.toggle('hidden', target !== 'metrics');
+        document.getElementById('tab-artifacts').classList.toggle('flex', target === 'artifacts');
+        document.getElementById('tab-metrics').classList.toggle('flex', target === 'metrics');
+      });
+    });
+
+    // Mobile Tabs
+    document.querySelectorAll('.mobile-tab-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const target = btn.getAttribute('data-mobile-tab');
+        state.mobileTab = target;
+        document.querySelectorAll('.mobile-tab-btn').forEach(b => {
+          b.className = 'mobile-tab-btn flex-1 py-2 text-xs font-medium text-slate-400 border-b-2 border-transparent';
+        });
+        btn.className = 'mobile-tab-btn flex-1 py-2 text-xs font-semibold text-indigo-400 border-b-2 border-indigo-500';
+
+        const pAgents = document.getElementById('panel-agents');
+        const pChat = document.getElementById('panel-chat');
+        const pWork = document.getElementById('panel-workspace');
+
+        pAgents.classList.toggle('hidden', target !== 'agents');
+        pAgents.classList.toggle('flex', target === 'agents');
+        pChat.classList.toggle('hidden', target !== 'chat');
+        pChat.classList.toggle('flex', target === 'chat');
+        pWork.classList.toggle('hidden', target !== 'workspace');
+        pWork.classList.toggle('flex', target === 'workspace');
+      });
+    });
+
+    // Event Delegation for Dynamic Elements
+    document.getElementById('agent-list').addEventListener('click', e => {
+      const toggleBtn = e.target.closest('[data-toggle-agent]');
+      if (toggleBtn) {
+        const id = toggleBtn.getAttribute('data-toggle-agent');
+        const ag = state.agents.find(a => a.id === id);
+        if (ag) {
+          ag.active = !ag.active;
+          renderAgents();
+        }
+        return;
+      }
+      const pingBtn = e.target.closest('[data-ping-agent]');
+      if (pingBtn) {
+        const id = pingBtn.getAttribute('data-ping-agent');
+        const input = document.getElementById('user-chat-input');
+        input.value = `@${id} `;
+        input.focus();
+      }
+    });
+
+    document.getElementById('chat-feed').addEventListener('click', e => {
+      const copyBtn = e.target.closest('[data-copy-msg]');
+      if (copyBtn) {
+        const id = copyBtn.getAttribute('data-copy-msg');
+        const msg = state.messages.find(m => m.id === id);
+        if (msg && msg.code) copyText(msg.code.content);
+      }
+    });
+
+    document.getElementById('task-list').addEventListener('click', e => {
+      const cycleBtn = e.target.closest('[data-cycle-task]');
+      if (cycleBtn) {
+        const id = cycleBtn.getAttribute('data-cycle-task');
+        const task = state.tasks.find(t => t.id === id);
+        if (task) {
+          const order = ['todo', 'in_progress', 'review', 'done'];
+          task.status = order[(order.indexOf(task.status) + 1) % order.length];
+          renderAll();
+        }
+      }
+    });
+
+    document.getElementById('artifact-list').addEventListener('click', e => {
+      const copyBtn = e.target.closest('[data-copy-artifact]');
+      if (copyBtn) {
+        const id = copyBtn.getAttribute('data-copy-artifact');
+        const art = state.artifacts.find(a => a.id === id);
+        if (art) copyText(art.content);
+      }
+    });
+
+    // Initial Render
+    renderAll();
+  </script>
+</body>
+</html>
