@@ -77,8 +77,8 @@ python3 -m http.server 8000      # 또는 아무 정적 서버
 `.local-tests/agent-collab-studio/`에 있습니다(저장소에는 포함하지 않음).
 
 ```bash
-node .local-tests/agent-collab-studio/test.js     # jsdom: 분석·10턴·리포트·개입·저장·가이드·팀 투입·역할 (274개)
-node .local-tests/agent-collab-studio/ui.test.js  # headless: 조작·다운로드·오버플로·콘솔 에러·가이드·팀 투입 (114개)
+node .local-tests/agent-collab-studio/test.js     # jsdom: 분석·10턴·리포트·개입·저장·가이드·팀 투입·역할 (323개)
+node .local-tests/agent-collab-studio/ui.test.js  # headless: 조작·다운로드·오버플로·콘솔 에러·가이드·팀 투입 (124개)
 ```
 
 ## 배포
