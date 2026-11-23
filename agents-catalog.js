@@ -1,8 +1,8 @@
 /* 자동 생성 파일 — 원본은 agents-catalog.json 입니다. 직접 고치지 마세요. */
 window.ACS_CATALOG = {
-  "version": "1.1.0",
-  "updated": "2026-11-22",
-  "note": "무료 에이전트 가이드(GUIDE) 13개 항목과 팀 투입 역할 정의. 일일 스캔은 tools 배열에 항목을 추가하고 injectable·role을 지정하면 된다.",
+  "version": "1.2.0",
+  "updated": "2026-11-23",
+  "note": "무료 에이전트 가이드(GUIDE) 16개 항목과 팀 투입 역할 정의. 일일 스캔은 tools 배열에 항목을 추가하고 injectable·role을 지정하면 된다.",
   "roles": [
     {
       "id": "lead",
@@ -264,8 +264,8 @@ window.ACS_CATALOG = {
       "en": "Copilot Free",
       "free": "free",
       "badge": "무료 티어",
-      "one": "편집기 안 자동완성과 제한된 에이전트 모드를 주는 무료 티어.",
-      "scope": "월 2,000회 자동완성 + 제한된 에이전트 사용 · 카드 등록 없이 시작",
+      "one": "편집기 자동완성과 제한된 에이전트에, 크롬 확장으로 내 브라우저까지 조종하는 무료 티어.",
+      "scope": "월 2,000회 자동완성 + 제한된 에이전트 사용 · 카드 등록 없이 시작 · 2026-11-17부터 Chrome 확장 연동 Browser Use(브라우저 제어) 퍼블릭 프리뷰",
       "mission": {
         "title": "Copilot 무료로 블로그 도구 리팩토링",
         "goal": "2주 안에 블로그 이전 도구의 중복 코드 3곳을 정리하고 자동완성 월 한도 안에서 마무리한다",
@@ -277,7 +277,8 @@ window.ACS_CATALOG = {
       "initial": "C",
       "color": "#c4b5fd",
       "limit": "월 2,000회 자동완성",
-      "role": "code"
+      "role": "code",
+      "source": "https://github.blog/changelog/2026-11-17-let-github-copilot-interact-with-your-browser/"
     },
     {
       "id": "cursor",
@@ -322,6 +323,75 @@ window.ACS_CATALOG = {
       "color": "#c4b5fd",
       "limit": "월 50크레딧",
       "role": "spec"
+    },
+    {
+      "id": "opencode",
+      "cat": "coding",
+      "name": "OpenCode + Browse",
+      "en": "OpenCode · MIT",
+      "free": "free",
+      "badge": "오픈소스 MIT",
+      "one": "터미널에서 돌리는 오픈소스 코딩 에이전트. Browse 확장을 붙이면 내 크롬 로그인 그대로 웹을 조작한다.",
+      "scope": "MIT 오픈소스 무료 · 계정 없이 무료 모델, 로컬 모델·다른 구독 연동 · Browse(크롬 확장+MCP)는 로그인된 실제 탭을 제어하고 로그인·2FA·결제만 사용자에게 넘김",
+      "mission": {
+        "title": "OpenCode + Browse로 버그 2건 고치고 화면 확인",
+        "goal": "1주 안에 OpenCode로 저장소 버그 2건을 고치고 OpenCode Browse로 로그인된 화면을 직접 확인해 배포한다",
+        "context": "MIT 오픈소스 무료, 계정 없이 무료 모델, 하루 1시간, 예산 0원, 로그인·결제는 직접"
+      },
+      "agentId": "opencode",
+      "injectable": true,
+      "self": false,
+      "initial": "OC",
+      "color": "#c4b5fd",
+      "limit": "MIT 무료 · 로컬 모델",
+      "role": "code",
+      "source": "https://opencode.ai/product/browse"
+    },
+    {
+      "id": "devin-desktop",
+      "cat": "coding",
+      "name": "Devin Desktop",
+      "en": "구 Windsurf",
+      "free": "free",
+      "badge": "무료 $0",
+      "one": "Windsurf가 이름을 바꾼 AI 코드 에디터. Tab 자동완성과 인라인 편집은 무제한이다.",
+      "scope": "$0 Free 플랜(카드 불필요) · 무제한 Tab 자동완성·인라인 편집 + 일·주간으로 리셋되는 무료 에이전트 할당량(무료는 SWE 계열 모델만)",
+      "mission": {
+        "title": "Devin Desktop 무료 할당량으로 랜딩 페이지 다듬기",
+        "goal": "2주 안에 Devin Desktop Free로 랜딩 페이지 문구와 레이아웃을 다듬고 모바일 화면까지 확인한다",
+        "context": "무료 에이전트 할당량, Tab 자동완성 무제한, 평일 저녁 하루 1시간, 예산 0원"
+      },
+      "agentId": "devin-desktop",
+      "injectable": true,
+      "self": false,
+      "initial": "DD",
+      "color": "#c4b5fd",
+      "limit": "무료 에이전트 할당량",
+      "role": "ide",
+      "source": "https://devin.ai/pricing"
+    },
+    {
+      "id": "warp-free",
+      "cat": "coding",
+      "name": "Warp Free",
+      "en": "Warp Agent CLI",
+      "free": "free",
+      "badge": "무료 $0",
+      "one": "명령을 알아서 채워 주는 AI 터미널. 어느 터미널에서든 Warp Agent CLI로 같은 에이전트를 쓴다.",
+      "scope": "$0 Free 플랜(카드 불필요) · AI 터미널 + Warp Agent CLI · 내 API 키(BYOK)·ChatGPT 구독으로 추론하고 더 쓸 땐 30일 주기로 정산되는 종량 결제",
+      "mission": {
+        "title": "Warp Agent CLI로 반복 배포 명령 3개 묶기",
+        "goal": "1주 안에 Warp 터미널과 Warp Agent CLI로 반복 배포 명령 3개를 워크플로우로 묶어 실행한다",
+        "context": "무료 플랜, 내 API 키(BYOK) 사용, 하루 30분, 예산 0원, 로컬에서만 실행"
+      },
+      "agentId": "warp-free",
+      "injectable": true,
+      "self": false,
+      "initial": "W",
+      "color": "#c4b5fd",
+      "limit": "BYOK 무료 · 종량제",
+      "role": "ide",
+      "source": "https://www.warp.dev/pricing"
     },
     {
       "id": "comet",

@@ -650,7 +650,7 @@
   const STAGE_NAMES = ['미션 브리핑', '과제 분해', '심층 검증', '중간 조율', '수정 실행안', '품질 게이트', '산출물 작성', '실행 체크리스트', '최종 검증', '최종 종합'];
 
   /* ─────────── 4-0. 에이전트 카탈로그 (agents-catalog.json 원본) ───────────
-     가이드 13개 항목과 팀 투입 역할 정의는 agents-catalog.json 이 원본이고,
+     가이드 16개 항목과 팀 투입 역할 정의는 agents-catalog.json 이 원본이고,
      브라우저에서 파일 하나로도 열리도록 scripts/catalog.mjs 가 agents-catalog.js 사본을 만든다. */
   const CATALOG = (window.ACS_CATALOG && typeof window.ACS_CATALOG === 'object') ? window.ACS_CATALOG : { tools: [], roles: [], core: [] };
   const ROLES = (CATALOG.roles || []).slice();
@@ -2333,11 +2333,15 @@
       ? '<div class="gc-actions">' + missionBtn +
         '<button type="button" class="btn btn-sm gc-inject' + (onTeam ? ' is-on' : '') + '" data-tool-inject="' + esc(g.id) + '" aria-pressed="' + (onTeam ? 'true' : 'false') + '">' + (onTeam ? '팀에서 빼기' : '+ 팀에 투입') + '</button></div>'
       : '<div class="gc-actions">' + missionBtn + '<span class="gc-fixed">' + (g.self ? '이 화면 · 팀을 돌리는 곳' : '기본 팀 · 고정') + '</span></div>';
+    const sourceLink = g.source
+      ? '<a class="gc-src" href="' + esc(g.source) + '" target="_blank" rel="noopener noreferrer" title="' + esc(g.source) + '">공식 출처 ↗</a>'
+      : '';
     return '<article class="guide-card' + (onTeam ? ' is-on-team' : '') + '" data-tool="' + esc(g.id) + '" data-cat="' + esc(g.cat) + '" style="--gc:' + cat.color + '">' +
       '<div class="gc-top"><div class="gc-name"><b>' + esc(g.name) + '</b><span>' + esc(g.en) + '</span></div>' +
       '<span class="gc-badge' + (g.free === 'partial' ? ' partial' : '') + '">' + esc(g.badge) + '</span></div>' +
       '<p class="gc-one">' + esc(g.one) + '</p>' +
       '<div class="gc-free"><span>무료 제공 범위 · 제한</span><p>' + esc(g.scope) + '</p></div>' +
+      sourceLink +
       actions +
       '</article>';
   }
@@ -2584,7 +2588,7 @@
       catIds: () => GUIDE_CATS.map((c) => c.id),
       category: () => guideCat,
       filter: setGuideCat,
-      cards: () => GUIDE.map((g) => ({ id: g.id, name: g.name, cat: g.cat, free: g.free, badge: g.badge, scope: g.scope })),
+      cards: () => GUIDE.map((g) => ({ id: g.id, name: g.name, cat: g.cat, free: g.free, badge: g.badge, scope: g.scope, source: g.source || null })),
       missions: () => GUIDE.map((g) => ({ id: g.id, name: g.name, title: g.mission.title, goal: g.mission.goal, context: g.mission.context })),
       visible: () => $$('#guideList .guide-card').length,
       apply: applyToolMission
