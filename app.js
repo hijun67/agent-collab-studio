@@ -1423,6 +1423,7 @@
     L.push('# ' + p.title, '');
     L.push('> ' + reportTeamLine(data) + '  ');
     L.push('> ' + data.created + ' · ' + p.domainLabel + ' / ' + p.intentLabel + ' · 대상: ' + p.audience, '');
+    if (data.ai) L.push('> ' + aiProvenanceText(data.ai), '');
     L.push('## 1. 과제 요약', '');
     L.push('- **목표**: ' + data.summary.goal);
     L.push('- **배경·제약**: ' + data.summary.context);
@@ -1467,6 +1468,14 @@
   }
   function mdCell(s) { return String(s == null ? '' : s).replace(/\|/g, '\\|').replace(/\n/g, ' '); }
 
+  function aiProvenanceText(ai) {
+    if (!ai) return '';
+    const label = ai.provider && ai.provider.indexOf('byok') === 0
+      ? 'BYOK · ' + String(ai.provider).replace('byok-', '')
+      : 'Workers AI';
+    return 'AI 종합 · ' + label + (ai.model ? ' (' + ai.model + ')' : '') + ' — 10턴 협업 기록을 실제 AI가 다시 정리했습니다';
+  }
+
   function reportHtml(data) {
     const p = data.p;
     const team = data.team || [];
@@ -1474,11 +1483,12 @@
     const section = (n, title, body) => '<h2><span class="n">' + n + '</span>' + esc(title) + '</h2>' + body;
     let h = '<h1>' + esc(p.title) + '</h1>' +
       '<p class="rsub">' + data.created + ' · ' + esc(p.domainLabel) + ' / ' + esc(p.intentLabel) + ' · 대상 ' + esc(p.audience) + '</p>' +
+      (data.ai ? '<p class="rprovenance">' + esc(aiProvenanceText(data.ai)) + '</p>' : '') +
       section('01', '과제 요약',
         '<div class="summary-grid">' +
-        '<div class="summary-cell"><span>목표</span><b>' + esc(cut(p.goal, 160)) + '</b></div>' +
+        '<div class="summary-cell"><span>목표</span><b>' + esc(cut(data.summary.goal || p.goal, 160)) + '</b></div>' +
         '<div class="summary-cell"><span>기간</span><b>' + esc(data.summary.deadline) + '</b></div>' +
-        '<div class="summary-cell"><span>배경·제약</span><b>' + esc(cut(data.summary.context, 160)) + '</b></div>' +
+        '<div class="summary-cell"><span>배경·제약</span><b>' + esc(cut(data.summary.context || p.context || '별도 제약 없음', 160)) + '</b></div>' +
         '<div class="summary-cell"><span>핵심 키워드</span><b>' + esc(data.summary.keywords.join(', ')) + '</b></div>' +
         '</div>' +
         '<h3>성공 기준</h3><ol>' + data.summary.criteria.map((c) => '<li>' + esc(c) + '</li>').join('') + '</ol>') +
@@ -1522,6 +1532,7 @@
       '.brand{font-size:11px;letter-spacing:.16em;color:#0f766e;font-weight:700;margin-bottom:6px}\n' +
       'h1{font-size:26px;line-height:1.35;margin:0 0 6px;letter-spacing:-.02em}\n' +
       '.rsub{color:#6b7280;font-size:12px;margin:0 0 26px}\n' +
+      '.rprovenance{color:#0f766e;font-size:11px;margin:-16px 0 24px;border-left:2px solid #99f6e4;padding-left:8px}\n' +
       'h2{font-size:15px;margin:32px 0 10px;padding-bottom:7px;border-bottom:2px solid #e5e7eb;display:flex;gap:8px;align-items:center}\n' +
       'h2 .n{font-size:10px;color:#0f766e;border:1px solid #99f6e4;background:#f0fdfa;border-radius:4px;padding:1px 5px}\n' +
       'h3{font-size:13px;margin:16px 0 6px;color:#374151}\n' +
@@ -1569,13 +1580,351 @@
     typingAgent: null,
     runId: null,
     createdAt: null,
-    extras: []
+    extras: [],
+    pendingTurn: false,
+    ai: { ready: null, source: 'local', provider: '', model: '', ms: 0, reason: '', attempted: false, models: [] }
   };
   let autoTimer = null;
   let typingTimer = null;
   let pendingFresh = null;
   let stageQueue = [];
   let stageFresh = null;
+
+  /* ═══════════════ 6-1. AI 실시간 생성 (🤖 에이전트 협업) ═══════════════
+     - 기본은 서버의 /api/collab → Workers AI. 키 입력 없이 바로 동작한다.
+     - 사용자가 자기 키(BYOK)를 넣으면 그 키로만 호출하고, 키는 이 브라우저에만 둔다.
+     - 호출 실패·오프라인·할당량 초과면 아래 결정론적 엔진(buildTurn 등)으로 폴백한다. */
+  const LS_AI = 'acs.ai.v1';
+  const AI_ENDPOINT = '/api/collab';
+  const AI_TIMEOUT = 22000;
+  const AI_PROVIDERS = [
+    { id: 'auto', label: '자동 · Workers AI 무료', short: '자동' },
+    { id: 'openai', label: 'OpenAI (본인 키)', short: 'OpenAI' },
+    { id: 'gemini', label: 'Google Gemini (본인 키)', short: 'Gemini' },
+    { id: 'openrouter', label: 'OpenRouter (본인 키)', short: 'OpenRouter' }
+  ];
+  let aiConfig = { provider: 'auto', key: '', model: '' };
+
+  function aiAvailable() {
+    return typeof fetch === 'function' && typeof location !== 'undefined' && /^https?:/.test(location.protocol);
+  }
+
+  function aiProviderDef(id) {
+    return AI_PROVIDERS.find((p) => p.id === (id || aiConfig.provider)) || AI_PROVIDERS[0];
+  }
+
+  function loadAiConfig() {
+    const saved = readJSON(LS_AI, null);
+    if (saved && typeof saved === 'object') {
+      aiConfig = {
+        provider: AI_PROVIDERS.some((p) => p.id === saved.provider) ? saved.provider : 'auto',
+        key: typeof saved.key === 'string' ? saved.key : '',
+        model: typeof saved.model === 'string' ? saved.model : ''
+      };
+    }
+    if (aiConfig.provider !== 'auto' && !aiConfig.key) aiConfig.provider = 'auto';
+  }
+
+  function saveAiConfig(next) {
+    aiConfig = {
+      provider: next && AI_PROVIDERS.some((p) => p.id === next.provider) ? next.provider : 'auto',
+      key: next && typeof next.key === 'string' ? next.key.trim() : '',
+      model: next && typeof next.model === 'string' ? next.model.trim() : ''
+    };
+    if (aiConfig.provider !== 'auto' && !aiConfig.key) aiConfig.provider = 'auto';
+    try { localStorage.setItem(LS_AI, JSON.stringify(aiConfig)); } catch (e) { /* 저장 실패는 무시 */ }
+    renderAiStatus();
+    return aiConfig;
+  }
+
+  function plainText(html) {
+    return String(html || '')
+      .replace(/<[^>]*>/g, ' ')
+      .replace(/&nbsp;/g, ' ')
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'")
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&amp;/g, '&')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  /* AI가 쓴 **굵게** 만 허용하고 나머지는 전부 escape 한다. */
+  function richText(text) {
+    return esc(text).replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>');
+  }
+
+  function aiMissionPayload(p) {
+    return {
+      title: p.title,
+      goal: p.goal,
+      context: p.context || '',
+      audience: p.audience || '',
+      deadline: p.deadline ? p.deadline.label : '',
+      deliverable: p.deliverable || '',
+      keywords: p.keywords.slice(0, 6),
+      constraints: (p.constraints || []).map((c) => c.label).slice(0, 6),
+      kpis: (p.kpis || []).slice(0, 4),
+      checks: (p.checks || []).slice(0, 6),
+      plan: p.plan,
+      steps: (p.steps || []).map((s) => ({ name: s.name, detail: plainText(s.detail).slice(0, 180), when: s.when, owner: s.owner, output: s.output })),
+      risks: (p.risks || []).slice(0, 3).map((r) => ({ r: r.r, i: r.i, m: r.m }))
+    };
+  }
+
+  function aiHistoryPayload() {
+    return state.messages.slice(-8).map((m) => ({
+      agent: m.agent === 'user' ? '나(사용자)' : ((agentById(m.agent) || {}).name || '에이전트'),
+      stage: m.stage || 0,
+      text: plainText(m.html).slice(0, 260)
+    })).filter((m) => m.text);
+  }
+
+  function aiTurnPayload(turn, stage, p, fresh) {
+    const a = agentById(turn.agent) || CORE_AGENTS[0];
+    return {
+      mode: stage >= TURN_TOTAL && !!turn.report ? 'report' : 'turn',
+      stage: stage,
+      stageName: STAGE_NAMES[clamp(stage - 1, 0, TURN_TOTAL - 1)],
+      mission: aiMissionPayload(p),
+      agent: {
+        id: a.guideId || a.id,
+        name: a.name,
+        role: a.roleKo,
+        sub: a.sub,
+        badge: a.tool ? a.tool.badge : '',
+        limit: a.tool ? (a.tool.limit || '') : '',
+        extra: !a.fixed
+      },
+      team: teamAgents().map((x) => ({ name: x.name, role: x.roleKo, badge: x.tool ? x.tool.badge : '' })),
+      history: aiHistoryPayload(),
+      directives: state.feedback.map((f) => f.text).slice(-4),
+      directive: fresh || '',
+      byok: aiConfig.provider !== 'auto' && aiConfig.key ? { provider: aiConfig.provider, key: aiConfig.key, model: aiConfig.model } : undefined
+    };
+  }
+
+  function aiRequest(payload) {
+    return new Promise((resolve) => {
+      let done = false;
+      const controller = typeof AbortController === 'function' ? new AbortController() : null;
+      const timer = setTimeout(() => {
+        if (done) return;
+        done = true;
+        try { if (controller) controller.abort(); } catch (e) { /* 무시 */ }
+        resolve({ ok: false, code: 'timeout', message: '응답 시간이 초과되었습니다.' });
+      }, AI_TIMEOUT);
+      const finish = (value) => {
+        if (done) return;
+        done = true;
+        clearTimeout(timer);
+        resolve(value);
+      };
+      try {
+        fetch(AI_ENDPOINT, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(payload),
+          signal: controller ? controller.signal : undefined
+        })
+          .then((res) => res.json().catch(() => null))
+          .then((data) => finish(data || { ok: false, code: 'bad_response', message: '서버 응답을 읽지 못했습니다.' }))
+          .catch((err) => finish({ ok: false, code: 'network', message: String((err && err.message) || err) }));
+      } catch (err) {
+        finish({ ok: false, code: 'network', message: String((err && err.message) || err) });
+      }
+    });
+  }
+
+  function aiTurnHtml(data) {
+    const parts = [];
+    (data.say || []).forEach((line) => parts.push('<p>' + richText(line) + '</p>'));
+    if (data.points && data.points.length) {
+      parts.push('<ul class="bullets">' + data.points.map((pt) => '<li>' + (pt.t ? '<b>' + richText(pt.t) + '</b> ' : '') + richText(pt.d || '') + '</li>').join('') + '</ul>');
+    }
+    if (data.callout && data.callout.text) {
+      parts.push('<div class="callout"><b>' + esc(data.callout.label || '판단') + '</b> ' + richText(data.callout.text) + '</div>');
+    }
+    return parts.join('');
+  }
+
+  /* AI 산출물은 기존 산출물 자리의 제목·구성을 유지하고 본문만 AI가 쓴다. */
+  function aiArtifacts(data, turn) {
+    const local = turn.artifacts || [];
+    if (!data.artifact || !data.artifact.markdown) return local;
+    const first = local[0];
+    const head = first
+      ? { title: first.title, content: data.artifact.markdown }
+      : { title: data.artifact.title || 'AI 산출물', content: data.artifact.markdown };
+    return [head].concat(local.slice(1));
+  }
+
+  function mergeAiReport(local, ai, meta) {
+    if (!local) return null;
+    const r = Object.assign({}, local);
+    if (ai.summary) {
+      r.summary = Object.assign({}, local.summary, {
+        goal: ai.summary.goal || local.summary.goal,
+        context: ai.summary.context || local.summary.context,
+        criteria: ai.summary.criteria && ai.summary.criteria.length ? ai.summary.criteria : local.summary.criteria
+      });
+    }
+    if (ai.roadmap && ai.roadmap.length >= 2) r.roadmap = ai.roadmap;
+    if (ai.risks && ai.risks.length >= 2) r.risks = ai.risks;
+    if (ai.checklist && ai.checklist.length >= 3) r.checklist = ai.checklist;
+    if (ai.gates && ai.gates.length) r.gates = ai.gates;
+    if (ai.next && ai.next.length) r.next = ai.next;
+    r.ai = meta;
+    return r;
+  }
+
+  /** 한 턴을 AI로 시도하고, 실패하면 로컬 턴을 그대로 돌려준다. 절대 reject 하지 않는다. */
+  function aiTurn(turn, stage, p, fresh) {
+    const started = Date.now();
+    const local = (reason) => ({
+      turn: turn,
+      meta: { source: 'local', provider: 'local', model: '', ms: Date.now() - started, reason: reason || '' }
+    });
+    if (!aiAvailable()) return Promise.resolve(local('offline'));
+    const payload = aiTurnPayload(turn, stage, p, fresh);
+    return aiRequest(payload).then((data) => {
+      const ms = Date.now() - started;
+      if (!data || data.ok !== true) return local((data && (data.message || data.code)) || 'error');
+      const norm = data.mode === 'report' ? data.report : data.turn;
+      if (!norm) return local('empty');
+      const enriched = Object.assign({}, turn, {
+        html: aiTurnHtml(norm) || turn.html,
+        artifacts: aiArtifacts(norm, turn)
+      });
+      if (data.mode === 'report') {
+        const localReport = turn.report || buildReportData(p);
+        const merged = mergeAiReport(localReport, norm, {
+          provider: data.provider || 'workers-ai',
+          model: data.model || '',
+          ms: data.ms || ms,
+          at: Date.now()
+        });
+        if (merged) enriched.report = merged;
+      }
+      return {
+        turn: enriched,
+        meta: { source: 'ai', provider: data.provider || 'workers-ai', model: data.model || '', ms: data.ms || ms, at: Date.now(), reason: '' }
+      };
+    }).catch((err) => local(String((err && err.message) || err)));
+  }
+
+  /** 서버 기능 확인 — 키 없이 Workers AI가 붙어 있는지. */
+  function probeAi() {
+    if (!aiAvailable()) {
+      state.ai.ready = false;
+      state.ai.reason = '브라우저에서 API를 호출할 수 없습니다.';
+      renderAiStatus();
+      return Promise.resolve(false);
+    }
+    try {
+      return fetch(AI_ENDPOINT, { method: 'GET', headers: { accept: 'application/json' } })
+        .then((res) => res.json().catch(() => null))
+        .then((data) => {
+          state.ai.ready = !!(data && data.ok && data.workersAi);
+          state.ai.models = (data && data.models) || [];
+          if (!state.ai.ready) state.ai.reason = 'Workers AI를 쓸 수 없어 로컬 엔진으로 동작합니다.';
+          renderAiStatus();
+          return state.ai.ready;
+        })
+        .catch(() => {
+          state.ai.ready = false;
+          state.ai.reason = 'API에 연결하지 못해 로컬 엔진으로 동작합니다.';
+          renderAiStatus();
+          return false;
+        });
+    } catch (e) {
+      state.ai.ready = false;
+      state.ai.reason = 'API에 연결하지 못해 로컬 엔진으로 동작합니다.';
+      renderAiStatus();
+      return Promise.resolve(false);
+    }
+  }
+
+  function renderAiStatus() {
+    const btn = $('#btnAi');
+    if (!btn) return;
+    const ai = state.ai;
+    const label = $('#aiLabel');
+    const dot = $('#aiDot');
+    let text = 'AI 실시간';
+    let tone = 'is-ai';
+    let title = '협업 턴을 실제 AI(Workers AI, 무료)가 생성합니다. 키 입력이 필요 없습니다.';
+    if (aiConfig.provider !== 'auto') {
+      text = 'AI · ' + aiProviderDef().short;
+      tone = 'is-byok';
+      title = '내 ' + aiProviderDef().short + ' 키로 협업 턴을 생성합니다. 키는 이 브라우저에만 저장됩니다.';
+    } else if (ai.ready === null) {
+      text = 'AI 확인 중';
+      tone = 'is-checking';
+      title = 'AI 연결을 확인하고 있습니다.';
+    } else if (ai.ready === false) {
+      text = '로컬 엔진';
+      tone = 'is-local';
+      title = ai.reason || 'AI를 쓸 수 없어 브라우저 내 엔진으로 동작합니다.';
+    } else if (ai.attempted && ai.source === 'local') {
+      text = '로컬 폴백';
+      tone = 'is-local';
+      title = 'AI 호출이 실패해 기존 엔진으로 이 턴을 만들었습니다 — ' + (ai.reason || '알 수 없는 이유');
+    }
+    if (ai.source === 'ai' && ai.attempted) {
+      title += ' · 최근 응답 ' + (ai.model || ai.provider) + ' ' + Math.round((ai.ms || 0) / 100) / 10 + '초';
+    }
+    btn.className = 'ctl ctl-ai ' + tone;
+    btn.title = title;
+    btn.setAttribute('aria-label', 'AI 설정 — ' + text);
+    if (label) label.textContent = text;
+    if (dot) dot.className = 'ai-dot ' + tone;
+    const status = $('#aiStatus');
+    if (status && $('#aiOverlay') && !$('#aiOverlay').hidden) status.textContent = aiStatusText();
+  }
+
+  function aiStatusText() {
+    if (!aiAvailable()) return '이 환경에서는 API를 호출할 수 없습니다 — 브라우저 내 엔진으로 동작합니다.';
+    if (aiConfig.provider !== 'auto') return aiProviderDef().label + ' 키로 호출합니다. 키는 이 브라우저(localStorage)에만 저장됩니다.';
+    if (state.ai.ready === null) return 'AI 연결 확인 중…';
+    if (state.ai.ready) return 'Workers AI 연결됨 — 키 없이 바로 동작합니다.' + (state.ai.models && state.ai.models[0] ? ' (' + state.ai.models[0] + ')' : '');
+    return state.ai.reason || 'Workers AI를 쓸 수 없어 로컬 엔진으로 동작합니다.';
+  }
+
+  function syncAiForm() {
+    const provider = $('#aiProvider');
+    const key = $('#aiKey');
+    const model = $('#aiModel');
+    if (!provider) return;
+    const byok = provider.value !== 'auto';
+    if (key) {
+      key.disabled = !byok;
+      key.placeholder = byok ? 'API 키 (이 브라우저에만 저장)' : '자동 모드는 키가 필요 없습니다';
+    }
+    if (model) {
+      model.disabled = !byok;
+      model.placeholder = byok ? '모델 (선택) · 비우면 기본 모델' : '자동 모드는 서버가 모델을 고릅니다';
+    }
+    const hint = $('#aiByokHint');
+    if (hint) hint.hidden = !byok;
+    const status = $('#aiStatus');
+    if (status) status.textContent = aiStatusText();
+  }
+
+  function openAiDialog() {
+    if (!$('#aiOverlay')) return;
+    if ($('#aiProvider')) $('#aiProvider').value = aiConfig.provider;
+    if ($('#aiKey')) $('#aiKey').value = aiConfig.key;
+    if ($('#aiModel')) $('#aiModel').value = aiConfig.model;
+    syncAiForm();
+    $('#aiOverlay').hidden = false;
+    probeAi();
+  }
+
+  function closeAiDialog() {
+    if ($('#aiOverlay')) $('#aiOverlay').hidden = true;
+  }
 
   function publicState() {
     return {
@@ -1685,6 +2034,7 @@
     renderMetrics();
     renderControls();
     renderReportButton();
+    renderAiStatus();
   }
 
   function renderMission() {
@@ -1802,6 +2152,7 @@
       '<div class="msg-body">' +
       '<div class="msg-meta"><span class="msg-name">' + esc(a.name) + '</span>' +
       (m.tag ? '<span class="msg-tag">' + esc(m.tag) + '</span>' : '') +
+      (m.ai ? '<span class="msg-ai ' + (m.ai.source === 'ai' ? 'is-ai' : 'is-local') + '" title="' + esc(m.ai.source === 'ai' ? ((m.ai.model || m.ai.provider || 'AI') + ' · ' + (m.ai.ms ? (Math.round(m.ai.ms / 100) / 10) + '초' : '실시간 생성')) : ('AI 호출 대신 브라우저 내 엔진으로 생성' + (m.ai.reason ? ' · ' + m.ai.reason : ''))) + '">' + (m.ai.source === 'ai' ? 'AI' : '로컬') + '</span>' : '') +
       '<span class="msg-stage">STEP ' + String(m.stage).padStart(2, '0') + '</span>' +
       '<span class="msg-time">' + esc(m.time) + '</span></div>' +
       '<div class="bubble">' + m.html + art + (taskOps ? '<div class="taskop">태스크 보드 갱신 ' + taskOps + '</div>' : '') + '</div>' +
@@ -1901,7 +2252,7 @@
     btn.disabled = !state.report;
     btn.textContent = state.report ? '결과물 열기' : '결과물 준비 중';
     $('#reportNote').textContent = state.report
-      ? '협업이 끝났습니다. 과제 요약 · 실행 로드맵 · 리스크 대응 · 체크리스트가 한 문서로 묶였습니다.'
+      ? (state.report.ai ? '실제 AI가 협업 기록을 종합했습니다. 과제 요약 · 실행 로드맵 · 리스크 대응 · 체크리스트가 한 문서로 묶였습니다.' : '협업이 끝났습니다. 과제 요약 · 실행 로드맵 · 리스크 대응 · 체크리스트가 한 문서로 묶였습니다.')
       : (state.cursor > 0 ? '10턴이 끝나면 결과물이 생성됩니다. 현재 ' + state.cursor + ' / ' + TURN_TOTAL + '턴.' : '협업이 끝나면 과제 요약 · 실행 로드맵 · 리스크 대응 · 체크리스트가 한 문서로 묶입니다.');
   }
 
@@ -1911,6 +2262,7 @@
     stopAuto();
     clearTimeout(typingTimer);
     state.busy = false;
+    state.pendingTurn = false;
     const p = analyzeMission(input);
     p.feedbackLog = [];
     state.profile = p;
@@ -1946,7 +2298,8 @@
       time: nowTime(),
       html: (fresh ? '<div class="fb-quote">지시 반영 · "' + esc(cut(fresh, 120)) + '"</div>' : '') + turn.html.replace(/^<div class="fb-quote">[\s\S]*?<\/div>/, ''),
       tasks: turn.tasks || [],
-      artifacts: turn.artifacts || []
+      artifacts: turn.artifacts || [],
+      ai: turn.ai || null
     };
     state.messages.push(msg);
     (turn.tasks || []).forEach((t) => {
@@ -1970,6 +2323,7 @@
   function executeTurn(instant) {
     if (state.completed) return false;
     if (!state.profile) return false;
+    if (!instant && state.pendingTurn) return false;
     if (!stageQueue.length) {
       if (state.cursor >= TURN_TOTAL) return false;
       const nextStage = state.cursor + 1;
@@ -1983,9 +2337,10 @@
     const lastOfStage = !stageQueue.length;
     if (lastOfStage) stageFresh = null;
 
-    const apply = () => {
+    const apply = (enriched) => {
       state.busy = false;
-      addMessage(turn, fresh);
+      state.pendingTurn = false;
+      addMessage(enriched || turn, fresh);
       if (lastOfStage) state.cursor = stage;
       renderAll();
       saveSession();
@@ -1996,20 +2351,43 @@
       }
     };
 
-    if (instant) { apply(); return true; }
+    if (instant) { apply(Object.assign({}, turn, { ai: turn.ai || { source: 'local', provider: 'local', model: '', ms: 0, reason: '즉시 모드' } })); return true; }
+
     state.busy = true;
+    state.pendingTurn = true;
     showTyping(turn.agent);
     renderStage();
-    clearTimeout(typingTimer);
-    const delay = Math.max(240, Math.round(900 / state.speed));
-    typingTimer = setTimeout(() => {
+    renderControls();
+    renderAiStatus();
+
+    const runToken = state.runId;
+    const started = Date.now();
+    const minDelay = Math.max(160, Math.round(480 / state.speed));
+    const finish = (result, meta) => {
+      if (runToken !== state.runId) return; /* 새 과제가 시작됐으면 이 응답은 버린다 */
       hideTyping();
-      apply();
+      state.ai.attempted = true;
+      state.ai.source = (meta && meta.source) || 'local';
+      state.ai.provider = (meta && meta.provider) || 'local';
+      state.ai.model = (meta && meta.model) || '';
+      state.ai.ms = (meta && meta.ms) || 0;
+      state.ai.reason = (meta && meta.reason) || '';
+      const enriched = Object.assign({}, result || turn, { ai: state.ai.source === 'ai' ? { source: 'ai', provider: state.ai.provider, model: state.ai.model, ms: state.ai.ms } : { source: 'local', provider: 'local', model: '', ms: state.ai.ms, reason: state.ai.reason } });
+      apply(enriched);
+      renderAiStatus();
       if (state.autoPlay && !state.completed) {
         clearTimeout(autoTimer);
-        autoTimer = setTimeout(() => executeTurn(false), Math.max(450, Math.round(1500 / state.speed)));
+        autoTimer = setTimeout(() => executeTurn(false), Math.max(320, Math.round(760 / state.speed)));
       }
-    }, delay);
+    };
+
+    aiTurn(turn, stage, state.profile, fresh).then((res) => {
+      const wait = minDelay - (Date.now() - started);
+      if (wait > 0) setTimeout(() => finish(res && res.turn, res && res.meta), wait);
+      else finish(res && res.turn, res && res.meta);
+    }).catch((err) => {
+      finish(turn, { source: 'local', provider: 'local', model: '', ms: Date.now() - started, reason: String((err && err.message) || err) });
+    });
     return true;
   }
 
@@ -2050,12 +2428,20 @@
     av.textContent = a.initial;
     av.style.background = a.bg;
     $('#typingName').textContent = a.name;
+    const mode = $('#typingMode');
+    if (mode) {
+      const live = aiAvailable() && aiConfig.provider !== 'auto' ? aiProviderDef().short + ' AI' : (aiAvailable() && state.ai.ready !== false ? 'AI 실시간' : '로컬 엔진');
+      mode.textContent = '· ' + live;
+      mode.hidden = false;
+    }
     bar.hidden = false;
     $('#liveDot').className = 'live-dot busy';
     renderAgents();
   }
   function hideTyping() {
     $('#typingBar').hidden = true;
+    const mode = $('#typingMode');
+    if (mode) mode.hidden = true;
     state.busy = false;
     state.typingAgent = null;
     renderAgents();
@@ -2442,6 +2828,46 @@
     $('#btnNew').addEventListener('click', () => openNewModal());
     $('#btnHistory').addEventListener('click', openHistory);
     $('#btnGuide').addEventListener('click', () => openGuide());
+
+    /* AI 설정 · BYOK */
+    const btnAi = $('#btnAi');
+    if (btnAi) btnAi.addEventListener('click', openAiDialog);
+    const aiClose = $('#btnAiClose');
+    if (aiClose) aiClose.addEventListener('click', closeAiDialog);
+    const aiOverlay = $('#aiOverlay');
+    if (aiOverlay) aiOverlay.addEventListener('click', (e) => { if (e.target === aiOverlay) closeAiDialog(); });
+    const aiProvider = $('#aiProvider');
+    if (aiProvider) aiProvider.addEventListener('change', syncAiForm);
+    const aiSave = $('#aiSave');
+    if (aiSave) aiSave.addEventListener('click', () => {
+      const next = saveAiConfig({
+        provider: $('#aiProvider') ? $('#aiProvider').value : 'auto',
+        key: $('#aiKey') ? $('#aiKey').value : '',
+        model: $('#aiModel') ? $('#aiModel').value : ''
+      });
+      closeAiDialog();
+      showToast(next.provider === 'auto' ? 'AI 자동 모드(Workers AI)로 돌아갑니다' : aiProviderDef(next.provider).short + ' 키를 이 브라우저에만 저장했습니다');
+      if (next.provider === 'auto') probeAi();
+    });
+    const aiClear = $('#btnAiClear');
+    if (aiClear) aiClear.addEventListener('click', () => {
+      saveAiConfig({ provider: 'auto', key: '', model: '' });
+      if ($('#aiKey')) $('#aiKey').value = '';
+      if ($('#aiModel')) $('#aiModel').value = '';
+      if ($('#aiProvider')) $('#aiProvider').value = 'auto';
+      syncAiForm();
+      showToast('저장한 키를 지우고 자동 모드로 돌아왔습니다');
+      probeAi();
+    });
+    const aiTest = $('#btnAiTest');
+    if (aiTest) aiTest.addEventListener('click', () => {
+      const status = $('#aiStatus');
+      if (status) status.textContent = '연결 확인 중…';
+      probeAi().then((ok) => {
+        if (status) status.textContent = ok ? 'Workers AI 연결됨 — 키 없이 바로 동작합니다' : (state.ai.reason || 'Workers AI를 쓰지 못합니다');
+        showToast(ok ? 'Workers AI 연결됨' : 'Workers AI를 쓰지 못해 로컬 엔진으로 동작합니다');
+      });
+    });
     $('#btnCloseGuide').addEventListener('click', closeGuide);
     $('#guideOverlay').addEventListener('click', (e) => { if (e.target === $('#guideOverlay')) closeGuide(); });
     $('#guideFilters').addEventListener('click', (e) => {
@@ -2552,6 +2978,7 @@
       if (!$('#reportOverlay').hidden) closeReport();
       else if (!$('#historyOverlay').hidden) closeHistory();
       else if (!$('#guideOverlay').hidden) closeGuide();
+      else if ($('#aiOverlay') && !$('#aiOverlay').hidden) closeAiDialog();
       else if (!$('#modal').hidden) closeNewModal();
     });
 
@@ -2563,6 +2990,7 @@
   function boot() {
     if (booted) return;
     booted = true;
+    loadAiConfig();
     bind();
     switchRightTab('tasks');
     switchMobileTab(state.mobileTab);
@@ -2573,6 +3001,8 @@
     } else {
       renderAll();
     }
+    renderAiStatus();
+    probeAi();
   }
 
   /* 테스트·검증용 공개 API */
@@ -2603,7 +3033,7 @@
     },
     historyCount: () => readJSON(LS_HISTORY, []).length,
     restoreLatest: () => { const l = readJSON(LS_HISTORY, []); return l.length ? openHistoryItem(l[0].id) : false; },
-    reset: () => { stopAuto(); try { localStorage.removeItem(LS_SESSION); } catch (e) {} state.profile = null; state.messages = []; state.tasks = []; state.artifacts = []; state.cursor = 0; state.report = null; state.completed = false; state.feedback = []; state.extras = []; stageQueue = []; renderAll(); },
+    reset: () => { stopAuto(); state.pendingTurn = false; try { localStorage.removeItem(LS_SESSION); } catch (e) {} state.profile = null; state.messages = []; state.tasks = []; state.artifacts = []; state.cursor = 0; state.report = null; state.completed = false; state.feedback = []; state.extras = []; stageQueue = []; renderAll(); },
     TURN_TOTAL: TURN_TOTAL,
     STAGE_NAMES: STAGE_NAMES,
     AGENTS: CORE_AGENTS.map((a) => ({ id: a.id, name: a.name, role: a.roleKo })),
@@ -2628,7 +3058,25 @@
       clearDraft: () => { draftExtras = []; return []; },
       live: () => teamIsLive()
     },
-    turnStages: (roleId) => { const r = roleById(roleId); return r ? r.stages.slice() : []; }
+    turnStages: (roleId) => { const r = roleById(roleId); return r ? r.stages.slice() : []; },
+    /* AI 실시간 생성 API */
+    ai: {
+      available: aiAvailable,
+      status: () => Object.assign({}, state.ai, {
+        provider: aiConfig.provider,
+        byok: aiConfig.provider !== 'auto' && !!aiConfig.key,
+        ready: state.ai.ready
+      }),
+      configure: (cfg) => JSON.parse(JSON.stringify(saveAiConfig(cfg || {}))),
+      probe: () => probeAi(),
+      open: openAiDialog,
+      close: closeAiDialog,
+      liveStep: () => executeTurn(false),
+      pending: () => !!state.pendingTurn,
+      messages: () => state.messages.map((m) => ({ agent: m.agent, stage: m.stage, ai: m.ai || null, text: plainText(m.html).slice(0, 120) })),
+      missionPayload: () => (state.profile ? aiMissionPayload(state.profile) : null),
+      reportAi: () => (state.report ? state.report.ai || null : null)
+    }
   };
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
