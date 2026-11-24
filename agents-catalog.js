@@ -1,8 +1,8 @@
 /* 자동 생성 파일 — 원본은 agents-catalog.json 입니다. 직접 고치지 마세요. */
 window.ACS_CATALOG = {
-  "version": "1.2.0",
-  "updated": "2026-11-23",
-  "note": "무료 에이전트 가이드(GUIDE) 16개 항목과 팀 투입 역할 정의. 일일 스캔은 tools 배열에 항목을 추가하고 injectable·role을 지정하면 된다.",
+  "version": "1.3.0",
+  "updated": "2026-11-24",
+  "note": "무료 에이전트 가이드(GUIDE) 20개 항목과 팀 투입 역할 정의. 일일 스캔은 tools 배열에 항목을 추가하고 injectable·role을 지정하면 된다. status(tone·label·note)가 있으면 카드에 상태 띠로 표시된다.",
   "roles": [
     {
       "id": "lead",
@@ -241,21 +241,27 @@ window.ACS_CATALOG = {
       "name": "Google Jules",
       "en": "Jules",
       "free": "free",
-      "badge": "무료 · 일 15태스크",
-      "one": "GitHub 저장소를 맡기면 비동기로 고쳐 오는 코딩 에이전트.",
-      "scope": "GitHub 저장소를 연결해 하루 15개 태스크까지 무료 실행",
+      "badge": "읽기 전용 · 12/31 종료",
+      "status": {
+        "tone": "sunset",
+        "label": "읽기 전용 · 2026-12-31 종료 예정",
+        "note": "2026-11-11부터 읽기 전용으로 전환, 12-31 서비스 종료 후 Google Antigravity로 통합. Jules Tools로 세션·메모리·설정 내보내기만 가능"
+      },
+      "one": "GitHub 저장소를 맡기면 비동기로 고쳐 오던 코딩 에이전트. 지금은 읽기 전용이고 12월 31일에 끝난다.",
+      "scope": "무료는 하루 15개 태스크였고, 2026-11-11부터 읽기 전용 · 2026-12-31 서비스 종료(Google Antigravity 통합) · 남은 기간에는 기존 세션 마무리와 Jules Tools 데이터 내보내기만 가능",
       "mission": {
-        "title": "Jules로 저장소 문서·테스트 정리 15태스크",
-        "goal": "5일 안에 GitHub 저장소의 문서·테스트 정리 작업 15개를 Jules에 맡겨 PR로 받는다",
-        "context": "하루 15개 태스크 한도, 무료 플랜, 평일 저녁 하루 30분 검토, 예산 0원"
+        "title": "Jules 세션·설정을 Antigravity로 옮기기",
+        "goal": "12월 31일 전에 Jules Tools로 세션·메모리·설정을 내 PC에 내보내고, 남은 작업을 Antigravity에서 이어 갈 목록으로 정리한다",
+        "context": "Jules는 읽기 전용, 내보내기는 Jules Tools(npm), 평일 저녁 하루 30분, 예산 0원"
       },
       "agentId": "jules",
       "injectable": true,
       "self": false,
       "initial": "J",
       "color": "#c4b5fd",
-      "limit": "하루 15태스크",
-      "role": "code"
+      "limit": "읽기 전용 · 12/31 종료",
+      "role": "code",
+      "source": "https://jules.google/docs/changelog"
     },
     {
       "id": "copilot",
@@ -502,6 +508,98 @@ window.ACS_CATALOG = {
       "color": "#5eead4",
       "limit": "",
       "role": "exec"
+    },
+    {
+      "id": "linger",
+      "cat": "local",
+      "name": "Linger",
+      "en": "Linger · 로컬 개인 에이전트",
+      "free": "free",
+      "badge": "오픈소스 · 로컬 무료",
+      "one": "내 PC에서 125B급 모델을 돌려 토큰 비용 0원으로 움직이는 오픈소스 개인 에이전트.",
+      "scope": "오픈소스 · PolyStrata 엔진으로 12GB GPU·64GB RAM에서 125B MoE 실행(로컬 추론이라 토큰 비용 0원) · macOS(Apple silicon)·Windows·Linux 패키지, Intel Mac은 Docker Compose · 위키 메모리·Chrome/데스크톱 제어·team.md 멀티 에이전트·백그라운드 위임",
+      "mission": {
+        "title": "Linger 로컬 모델로 메일 분류 위키 만들기",
+        "goal": "2주 안에 Linger를 내 PC에 설치하고 밤마다 메일·회의를 위키 페이지로 정리해 다음 날 검색되는 상태까지 만든다",
+        "context": "로컬 추론만 사용(토큰 비용 0원), 12GB GPU·64GB RAM, 하루 1시간, 데이터는 기기 밖으로 내보내지 않음"
+      },
+      "agentId": "linger",
+      "injectable": true,
+      "self": false,
+      "initial": "L",
+      "color": "#fbbf24",
+      "limit": "로컬 추론 · 토큰 비용 0원",
+      "role": "local",
+      "source": "https://github.com/simplexai-labs/linger"
+    },
+    {
+      "id": "ego-lite",
+      "cat": "browser",
+      "name": "ego(lite)",
+      "en": "ego lite · Chromium",
+      "free": "free",
+      "badge": "무료 · 계정 불필요",
+      "one": "이미 로그인된 내 크롬을 그대로 물려받아, 쓰던 사이트에서 에이전트가 대신 클릭·입력하는 무료 크로미움 브라우저.",
+      "scope": "무료 앱(계정·구독·태스크 요금 없음, 계정가입 불필요) · macOS(Intel·Apple silicon)·Windows(베타), Linux는 예정 · 크롬 탭·북마크·비밀번호·확장·쿠키·프로필 복사(크롬 원본은 그대로) · /ego-browser 스킬로 Claude Code·Codex·Cursor·Gemini CLI 등 로컬 에이전트 연결, 에이전트마다 별도 Space에서 병렬 실행 · 모델·에이전트 비용은 본인 부담",
+      "mission": {
+        "title": "ego(lite)로 로그인된 사이트 조사 자동화",
+        "goal": "1주 안에 ego lite에 크롬 데이터를 옮기고, 이미 로그인된 사이트 2곳의 자료 조사를 Codex에 /ego-browser로 맡겨 비교표로 받는다",
+        "context": "무료 앱, 평일 저녁 하루 30분, 결제·삭제는 직접, 모델 비용은 쓰던 구독 안에서"
+      },
+      "agentId": "ego-lite",
+      "injectable": true,
+      "self": false,
+      "initial": "E",
+      "color": "#60a5fa",
+      "limit": "무료 앱 · 모델 비용 별도",
+      "role": "browser",
+      "source": "https://lite.ego.app"
+    },
+    {
+      "id": "amuse",
+      "cat": "assistant",
+      "name": "Replit Amuse",
+      "en": "Amuse · Apache-2.0",
+      "free": "partial",
+      "badge": "오픈소스 · 셀프호스트",
+      "one": "내 컴퓨터에서 혼자 돌아가는 개인 비서. 웹 조사·실시간 브라우저·알림·작은 앱을 맡고, 보내기·결제 전엔 승인 카드를 띄운다.",
+      "scope": "Apache-2.0 오픈소스 · Docker Compose로 내 PC(127.0.0.1 전용, 로그인 없음)에 셀프호스트 · OpenAI API 키(BYOK)와 PostgreSQL 필요, 일 사용량 한도(기본 2,000 units)에서 자동 정지 · 승인 카드, 로컬 암호화 볼트, 웹 조사 출처, 리마인더·백그라운드 점검",
+      "mission": {
+        "title": "Amuse를 내 PC에 세우고 아침 점검 맡기기",
+        "goal": "1주 안에 Docker로 Amuse를 띄우고 매일 아침 사이트 3곳을 확인해 중요한 것만 알려 주는 점검을 붙인다",
+        "context": "OpenAI API 키(BYOK), 일 사용량 한도 2,000 units, 127.0.0.1 로컬 실행, 보내기·결제는 승인 카드로 직접"
+      },
+      "agentId": "amuse",
+      "injectable": true,
+      "self": false,
+      "initial": "Am",
+      "color": "#5eead4",
+      "limit": "셀프호스트 · OpenAI 키 필요",
+      "role": "local",
+      "source": "https://github.com/replit/amuse"
+    },
+    {
+      "id": "karpo-browser",
+      "cat": "browser",
+      "name": "Karpo-browser",
+      "en": "Karpo · Apache-2.0",
+      "free": "partial",
+      "badge": "오픈소스 · System 1+2",
+      "one": "클릭·입력 같은 단계는 27B 결정 모델이, 계획과 판단은 내 에이전트가 맡는 오픈소스 브라우저 에이전트.",
+      "scope": "Apache-2.0 오픈소스(npm 설치·Chrome/CDP 연결, Node 22.18+) · System 1에 Karpo Decision 27B Act 가중치 공개, System 2는 Claude Code·Codex·MCP 클라이언트 · 공개 벤치마크 Browserbase v2 102개 과제에서 89%·과제당 201초·$0.096 · 결정 모델(System 1)과 System 2 모델 사용료는 본인 키로 지불",
+      "mission": {
+        "title": "Karpo-browser로 20단계 예약 조사 줄이기",
+        "goal": "2주 안에 karpo-browser를 설치해 20단계가 넘는 웹 과제 2건을 돌리고 단계당 시간·비용을 기록한다",
+        "context": "오픈소스 무료, System 1은 OpenRouter 결정 모델 키, 로컬 Chrome 연결, 과제당 예산 0.1달러"
+      },
+      "agentId": "karpo-browser",
+      "injectable": true,
+      "self": false,
+      "initial": "Kp",
+      "color": "#60a5fa",
+      "limit": "오픈소스 · 모델 비용 별도",
+      "role": "browser",
+      "source": "https://karpo.ai/blog/karpo-browser"
     }
   ]
 };

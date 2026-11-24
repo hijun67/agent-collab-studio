@@ -650,7 +650,7 @@
   const STAGE_NAMES = ['미션 브리핑', '과제 분해', '심층 검증', '중간 조율', '수정 실행안', '품질 게이트', '산출물 작성', '실행 체크리스트', '최종 검증', '최종 종합'];
 
   /* ─────────── 4-0. 에이전트 카탈로그 (agents-catalog.json 원본) ───────────
-     가이드 16개 항목과 팀 투입 역할 정의는 agents-catalog.json 이 원본이고,
+     가이드 20개 항목과 팀 투입 역할 정의는 agents-catalog.json 이 원본이고,
      브라우저에서 파일 하나로도 열리도록 scripts/catalog.mjs 가 agents-catalog.js 사본을 만든다. */
   const CATALOG = (window.ACS_CATALOG && typeof window.ACS_CATALOG === 'object') ? window.ACS_CATALOG : { tools: [], roles: [], core: [] };
   const ROLES = (CATALOG.roles || []).slice();
@@ -2319,10 +2319,12 @@
 
   function guideSummary() {
     const limited = GUIDE.filter((g) => g.free === 'partial').length;
+    const sunset = GUIDE.filter((g) => g.status).length;
     return '<span class="gs"><b>' + GUIDE.length + '</b>개 도구</span>' +
       '<span class="gs"><b>4</b>가지 유형</span>' +
-      '<span class="gs">전부 무료로 시작 가능</span>' +
-      '<span class="gs">무료 범위 제한 <b>' + limited + '</b>개</span>';
+      '<span class="gs">무료로 시작 가능</span>' +
+      '<span class="gs">무료 범위 제한 <b>' + limited + '</b>개</span>' +
+      (sunset ? '<span class="gs gs-warn">종료·전환 예정 <b>' + sunset + '</b>개</span>' : '');
   }
 
   function guideCardHtml(g) {
@@ -2336,9 +2338,14 @@
     const sourceLink = g.source
       ? '<a class="gc-src" href="' + esc(g.source) + '" target="_blank" rel="noopener noreferrer" title="' + esc(g.source) + '">공식 출처 ↗</a>'
       : '';
-    return '<article class="guide-card' + (onTeam ? ' is-on-team' : '') + '" data-tool="' + esc(g.id) + '" data-cat="' + esc(g.cat) + '" style="--gc:' + cat.color + '">' +
+    const statusRibbon = g.status
+      ? '<div class="gc-status ' + esc(g.status.tone || 'sunset') + '"><b>' + esc(g.status.label || '') + '</b>' +
+        (g.status.note ? '<span>' + esc(g.status.note) + '</span>' : '') + '</div>'
+      : '';
+    return '<article class="guide-card' + (onTeam ? ' is-on-team' : '') + (g.status ? ' is-sunset' : '') + '" data-tool="' + esc(g.id) + '" data-cat="' + esc(g.cat) + '" data-status="' + esc(g.status ? (g.status.tone || 'sunset') : '') + '" style="--gc:' + cat.color + '">' +
       '<div class="gc-top"><div class="gc-name"><b>' + esc(g.name) + '</b><span>' + esc(g.en) + '</span></div>' +
-      '<span class="gc-badge' + (g.free === 'partial' ? ' partial' : '') + '">' + esc(g.badge) + '</span></div>' +
+      '<span class="gc-badge' + (g.free === 'partial' ? ' partial' : '') + (g.status ? ' sunset' : '') + '">' + esc(g.badge) + '</span></div>' +
+      statusRibbon +
       '<p class="gc-one">' + esc(g.one) + '</p>' +
       '<div class="gc-free"><span>무료 제공 범위 · 제한</span><p>' + esc(g.scope) + '</p></div>' +
       sourceLink +
@@ -2588,7 +2595,8 @@
       catIds: () => GUIDE_CATS.map((c) => c.id),
       category: () => guideCat,
       filter: setGuideCat,
-      cards: () => GUIDE.map((g) => ({ id: g.id, name: g.name, cat: g.cat, free: g.free, badge: g.badge, scope: g.scope, source: g.source || null })),
+      cards: () => GUIDE.map((g) => ({ id: g.id, name: g.name, cat: g.cat, free: g.free, badge: g.badge, scope: g.scope, source: g.source || null, status: g.status ? (g.status.label || '') : null })),
+      sunset: () => GUIDE.filter((g) => g.status).map((g) => ({ id: g.id, label: g.status.label, note: g.status.note })),
       missions: () => GUIDE.map((g) => ({ id: g.id, name: g.name, title: g.mission.title, goal: g.mission.goal, context: g.mission.context })),
       visible: () => $$('#guideList .guide-card').length,
       apply: applyToolMission
@@ -2602,7 +2610,7 @@
     /* 카탈로그 · 팀 투입 API */
     catalog: {
       version: () => CATALOG.version,
-      tools: () => TOOLS.map((t) => ({ id: t.id, name: t.name, cat: t.cat, role: t.role, injectable: t.injectable, self: !!t.self, badge: t.badge, limit: t.limit })),
+      tools: () => TOOLS.map((t) => ({ id: t.id, name: t.name, cat: t.cat, role: t.role, injectable: t.injectable, self: !!t.self, badge: t.badge, limit: t.limit, source: t.source || null, status: t.status ? (t.status.label || '') : null })),
       injectable: () => INJECTABLE.map((t) => ({ id: t.id, name: t.name, role: t.role, badge: t.badge })),
       roles: () => ROLES.map((r) => ({ id: r.id, label: r.label, kind: r.kind, stages: r.stages })),
       injectRoles: () => INJECT_ROLES().map((r) => r.label),
