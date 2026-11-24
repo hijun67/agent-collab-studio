@@ -1855,7 +1855,11 @@
     let text = 'AI 실시간';
     let tone = 'is-ai';
     let title = '협업 턴을 실제 AI(Workers AI, 무료)가 생성합니다. 키 입력이 필요 없습니다.';
-    if (aiConfig.provider !== 'auto') {
+    if (ai.attempted && ai.source === 'local') {
+      text = '로컬 폴백';
+      tone = 'is-local';
+      title = 'AI 호출이 실패해 기존 엔진으로 이 턴을 만들었습니다 — ' + (ai.reason || '알 수 없는 이유');
+    } else if (aiConfig.provider !== 'auto') {
       text = 'AI · ' + aiProviderDef().short;
       tone = 'is-byok';
       title = '내 ' + aiProviderDef().short + ' 키로 협업 턴을 생성합니다. 키는 이 브라우저에만 저장됩니다.';
@@ -1867,10 +1871,6 @@
       text = '로컬 엔진';
       tone = 'is-local';
       title = ai.reason || 'AI를 쓸 수 없어 브라우저 내 엔진으로 동작합니다.';
-    } else if (ai.attempted && ai.source === 'local') {
-      text = '로컬 폴백';
-      tone = 'is-local';
-      title = 'AI 호출이 실패해 기존 엔진으로 이 턴을 만들었습니다 — ' + (ai.reason || '알 수 없는 이유');
     }
     if (ai.source === 'ai' && ai.attempted) {
       title += ' · 최근 응답 ' + (ai.model || ai.provider) + ' ' + Math.round((ai.ms || 0) / 100) / 10 + '초';
@@ -2372,6 +2372,7 @@
       state.ai.model = (meta && meta.model) || '';
       state.ai.ms = (meta && meta.ms) || 0;
       state.ai.reason = (meta && meta.reason) || '';
+      if (state.ai.source === 'ai') state.ai.ready = true;
       const enriched = Object.assign({}, result || turn, { ai: state.ai.source === 'ai' ? { source: 'ai', provider: state.ai.provider, model: state.ai.model, ms: state.ai.ms } : { source: 'local', provider: 'local', model: '', ms: state.ai.ms, reason: state.ai.reason } });
       apply(enriched);
       renderAiStatus();
