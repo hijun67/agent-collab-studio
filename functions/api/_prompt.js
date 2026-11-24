@@ -85,7 +85,7 @@ const TOPIC_SCENES = [
   { test: /스마트폰|통신|5G|6G|요금제|갤럭시|아이폰/i, scene: "a person holding a modern smartphone in a bright electronics store, device displays glowing behind" },
   { test: /국회|여당|야당|법안|탄핵|국정감사/i, scene: "the Korean National Assembly chamber, legislators seated at desks with microphones and a raised podium" },
   { test: /대통령|청와대|용산|정부|장관|총리/i, scene: "a government briefing room with a podium and flag, reporters raising cameras and microphones" },
-  { test: /선거|투표|후보|여론조사|지방선거/i, scene: "a polling station with a ballot box and a voter casting a ballot behind a screen, campaign posters blurred" },
+  { test: /선거|투표|여론조사|지방선거|대선|총선|공천|개표/i, scene: "a polling station with a ballot box and a voter casting a ballot behind a screen, campaign posters blurred" },
   { test: /검찰|법원|재판|구속|기소|판결|선고/i, scene: "a Korean courthouse corridor with a defendant walking between guards, photographers with cameras" },
   { test: /경찰|수사|범죄|마약|사기|횡령/i, scene: "police officers examining evidence on a table in a bright investigation room, case files and photos" },
   { test: /사고|화재|산불|폭발|붕괴|참사/i, scene: "firefighters in protective gear at a smoky accident site, emergency lights reflecting on wet asphalt" },
@@ -106,6 +106,7 @@ const TOPIC_SCENES = [
   { test: /반려동물|강아지|고양이|유기견/i, scene: "a person playing with a dog in a sunny park, a cat resting by a window indoors" },
   { test: /문화|공연|전시|미술|박물관|축제/i, scene: "a brightly lit art museum gallery with visitors viewing large paintings, a concert stage in the distance" },
   { test: /드라마|영화|아이돌|K팝|예능|방송|연예/i, scene: "a television studio set with cameras and stage lights, a performer standing under a spotlight" },
+  { test: /테니스|데이비스컵|배드민턴|탁구|골프|마라톤|수영|육상/i, scene: "tennis and racquet sports players training on an indoor court, rackets and balls on a bench courtside" },
   { test: /축구|야구|배구|농구|올림픽|월드컵/i, scene: "a packed sports stadium at night, floodlights on the field and fans cheering with flags" },
   { test: /날씨|기상|미세먼지|대기질|황사/i, scene: "a city skyline under a hazy sky, a person wearing a mask checking a weather app on a phone" },
   { test: /교통|지하철|버스|도로|운전|주차/i, scene: "a busy Seoul subway platform with commuters waiting, a city bus on a rainy avenue" },
@@ -355,9 +356,9 @@ export function parsePromptArray(text, expected) {
 
 /* Workers AI 텍스트 모델 — 앞에서부터 동작하는 것을 쓴다. */
 export const TEXT_MODELS = [
-  "@cf/meta/llama-3.1-8b-instruct",
-  "@cf/qwen/qwen2.5-7b-instruct",
   "@cf/meta/llama-3.2-3b-instruct",
+  "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+  "@cf/meta/llama-3.1-8b-instruct-fp8",
 ];
 
 export function modelOutputText(output) {

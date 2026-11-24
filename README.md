@@ -111,7 +111,7 @@ python3 -m http.server 8000      # 또는 아무 정적 서버
 
 ```bash
 node .local-tests/agent-collab-studio/test.js            # jsdom: 협업 엔진·가이드·팀 투입·모드 탭·Functions 구성 (423개)
-node .local-tests/agent-collab-studio/functions.test.mjs  # 본문 이미지 정제 추출·영문 프롬프트·이미지 폴백 (27개)
+node .local-tests/agent-collab-studio/functions.test.mjs  # 본문 이미지 정제 추출·영문 프롬프트·무관 장면 교체·이미지 폴백 (32개)
 node .local-tests/agent-collab-studio/ui.test.js          # headless: 협업 화면 조작·다운로드·오버플로·콘솔 에러·모드 전환 (138개)
 node .local-tests/agent-collab-studio/ui-studio.test.js   # headless: 미러링→4컷→카드뉴스 전 카드 이미지→390px (25개)
 ```
