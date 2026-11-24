@@ -266,15 +266,27 @@ export async function onRequest(context) {
   const ms = Date.now() - started;
 
   if (!result.ok || !result.data) {
+    const tried = result.tried || [];
+    const joined = tried.join(" ");
+    let message = result.message || "AI 응답을 만들지 못했습니다.";
+    if (/4006|free allocation|neurons/i.test(joined)) {
+      message = "Workers AI 무료 일일 할당량(10,000 neurons)이 소진되었습니다. 00:00 UTC(한국 09:00) 이후 다시 시도해 주세요.";
+    } else if (/deprecated|5028/i.test(joined)) {
+      message = "이 모델은 제공이 종료되었습니다. 다음 모델로 다시 시도해 주세요.";
+    } else if (/JSON|형식 불일치/i.test(joined) && !result.message) {
+      message = "AI가 정한 형식으로 답하지 않아 이 턴은 로컬 엔진으로 만들었습니다.";
+    } else if (result.code === "bad_output" && joined) {
+      message = "AI 응답을 해석하지 못했습니다 — " + joined.slice(0, 120);
+    }
     return json({
       ok: false,
       mode: req.mode,
       stage: req.stage,
       code: result.code || "ai_unavailable",
-      message: result.message || "AI 응답을 만들지 못했습니다.",
+      message,
       provider: result.provider || "none",
       ms,
-      tried: result.tried || [],
+      tried,
       warnings: result.warnings || [],
     }, 200);
   }

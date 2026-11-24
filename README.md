@@ -125,7 +125,7 @@ python3 -m http.server 8000      # 또는 아무 정적 서버
 ```bash
 node .local-tests/agent-collab-studio/test.js            # jsdom: 협업 엔진·가이드·팀 투입·모드 탭·Functions 구성 (423개)
 node .local-tests/agent-collab-studio/functions.test.mjs  # 본문 이미지 정제 추출·영문 프롬프트·무관 장면 교체·이미지 폴백 (31개)
-node .local-tests/agent-collab-studio/collab.test.mjs     # AI 협업 API: 프롬프트·응답 정규화·Workers AI·모델 폴백·BYOK (86개)
+node .local-tests/agent-collab-studio/collab.test.mjs     # AI 협업 API: 프롬프트·응답 정규화·Workers AI·모델 폴백·BYOK·할당량 안내 (90개)
 node .local-tests/agent-collab-studio/ai.test.js          # jsdom: AI 응답 배선·산출물·리포트·폴백·XSS (64개)
 node .local-tests/agent-collab-studio/ui.test.js          # headless: 협업 화면 조작·다운로드·오버플로·콘솔 에러·모드 전환 (138개)
 node .local-tests/agent-collab-studio/ui-ai.test.js       # headless: AI 실시간 10턴·산출물·리포트·BYOK·390px·폴백 (38개)
