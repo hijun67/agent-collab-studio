@@ -733,3 +733,68 @@ svg.ico { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-wi
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; scroll-behavior: auto !important; }
 }
+
+/* ══════════════════════════════════════════════════════════════
+   MODE BAR — 🤖 에이전트 협업 ↔ 🎨 4컷만화 · 카드뉴스
+   ══════════════════════════════════════════════════════════════ */
+.modebar {
+  flex: none; display: flex; gap: 6px; align-items: center;
+  padding: 8px 18px; border-bottom: 1px solid var(--line-soft);
+  background: rgba(8, 13, 22, 0.72); overflow-x: auto; scrollbar-width: none;
+}
+.modebar::-webkit-scrollbar { display: none; }
+.modebar-btn {
+  display: inline-flex; align-items: center; gap: 7px; flex: none;
+  padding: 7px 14px; border-radius: 999px; border: 1px solid transparent;
+  background: transparent; color: var(--muted);
+  font-size: 12.5px; font-weight: 700; letter-spacing: -0.01em; cursor: pointer;
+  transition: color .16s, background .16s, border-color .16s, box-shadow .16s;
+}
+.modebar-btn:hover { color: var(--txt); background: rgba(148, 163, 184, 0.08); }
+.modebar-btn.is-active {
+  color: #062b27; border-color: transparent;
+  background: linear-gradient(92deg, #5eead4 0%, #60a5fa 100%);
+  box-shadow: 0 10px 24px -14px rgba(94, 234, 212, 0.9);
+}
+.modebar-emoji { font-size: 13px; line-height: 1; }
+
+/* 스튜디오 모드에서는 협업 화면의 무대·탭·워크스페이스를 숨긴다 */
+body.mode-studio .stagebar,
+body.mode-studio .mtabs,
+body.mode-studio main.workspace { display: none !important; }
+body.mode-studio .topbar-controls { display: none !important; }
+
+/* 4컷만화 · 카드뉴스 스튜디오 (studio/style-scoped.css 가 내부를 담당) */
+#studioRoot {
+  flex: 1 1 auto;
+  min-height: 0 !important;
+  display: block;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
+#studioRoot[hidden] { display: none !important; }
+#studioRoot .foot { border-top: 1px solid var(--line-soft); }
+
+@media (max-width: 720px) {
+  .modebar { padding: 7px 12px; }
+  .modebar-btn { padding: 6px 11px; font-size: 12px; }
+}
+
+/* 스튜디오 자체 상단 바: 전역 헤더와 겹치는 브랜드는 숨기고 도구만 남긴다 */
+#studioRoot .studio-topbar { padding: 8px clamp(14px, 2.4vw, 32px); }
+#studioRoot .studio-topbar .brand { display: none; }
+#studioRoot .studio-topbar .top-actions { margin-left: auto; }
+
+/* 스튜디오 토스트는 #studioRoot 안의 fixed 요소 — 협업 화면의 top 기준을 물려받지 않게 한다 */
+#studioRoot .toast { top: auto; bottom: 26px; }
+
+@media (max-width: 720px) {
+  /* 모바일에서는 스튜디오 상단 도구 줄을 최소화해 작업 영역을 넓게 쓴다 */
+  #studioRoot .studio-topbar { padding: 6px 10px; gap: 8px; }
+  #studioRoot .studio-topbar #autofillBadge,
+  #studioRoot .studio-topbar #storagePill { display: none; }
+  #studioRoot .studio-topbar .btn { font-size: 11.5px; padding: 6px 9px; }
+  #studioRoot .studio-topbar .field.inline input { width: 76px; }
+}

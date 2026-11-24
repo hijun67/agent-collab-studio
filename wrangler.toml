@@ -1,0 +1,15 @@
+# ============================================================
+# Agent Collab Studio | Cloudflare Pages
+#  - 정적 자산: dist/ (node scripts/build.mjs)
+#  - Functions: functions/ 자동 인식 (/api/*)
+#  - Workers AI: 4컷만화 · 카드뉴스의 본문 기반 프롬프트·이미지 생성
+#  - 배포: npx wrangler pages deploy dist --project-name agent-collab-studio --branch main
+# ============================================================
+name = "agent-collab-studio"
+compatibility_date = "2026-11-20"
+pages_build_output_dir = "dist"
+
+# Workers AI — 무료 할당량 안에서 본문 기반 프롬프트(llama)와 이미지(flux)를 만든다.
+# 바인딩이 없으면 프롬프트는 시각 사전 폴백, 이미지는 Pollinations/Canvas 폴백으로 동작한다.
+[ai]
+binding = "AI"

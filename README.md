@@ -3,8 +3,29 @@
 피클(Lead) · 제미나이 태스크 · 코덱스 세 에이전트가 기본으로 협업하고, **무료 에이전트 가이드의 도구를 팀에 투입해 역할을 나눠 맡길 수 있는** 브라우저 앱입니다. 과제를 넣으면 마지막에 **하나의 결과물**로 종합합니다.
 
 - 라이브: <https://agent-collab-studio.pages.dev>
-- API 키도, 서버도, 외부 CDN도 쓰지 않습니다. HTML/CSS/JS와 카탈로그 JSON 한 장이 전부이고, 열면 바로 동작합니다.
-- 입력한 과제 문장에서 키워드·의도·제약을 분석해 **과제마다 다른 협업 내용**을 만듭니다. 고정 대본이 아닙니다.
+- 상단 **모드 전환 탭**으로 두 가지를 한 사이트에서 씁니다.
+  - **🤖 에이전트 협업** — 20종 무료 에이전트 가이드 · 팀 투입 · 10턴 협업 · 리포트 (기존 기능 그대로)
+  - **🎨 4컷만화 · 카드뉴스** — 기사 본문 이미지 + 기사 본문 기반 AI 이미지로 4컷만화·카드뉴스 제작
+- 협업 모드는 API 키도, 서버도, 외부 CDN도 쓰지 않습니다. 입력한 과제 문장에서 키워드·의도·제약을 분석해 **과제마다 다른 협업 내용**을 만듭니다. 고정 대본이 아닙니다.
+- 4컷만화·카드뉴스 모드는 Cloudflare Pages Functions(`/api/*`)와 Workers AI를 씁니다. AI가 없거나 실패해도 폴백(시각 사전 프롬프트 · Pollinations · Canvas 아트)으로 끝까지 동작합니다.
+
+## 🎨 4컷만화 · 카드뉴스 (통합 스튜디오)
+
+기사 하나를 넣으면 **기사 본문 사진을 정확히 골라** 4컷만화와 카드뉴스(4·6·8·10장)로 만듭니다. 이미지가 부족한 컷·카드는 **기사 본문을 읽어 만든 영문 장면 프롬프트**로 AI 이미지를 생성합니다.
+
+| 단계 | 하는 일 |
+|---|---|
+| **1. 미러링 허브** | 기사 주소 입력 · 예시 기사 3종 · 분류별 피드(분류당 20건) · 파트너스 고수익 목록. 본문을 직접 붙여넣어도 됩니다. |
+| **2. 4컷 만화** | 기사 본문 이미지를 컷에 배치(순서대로/개별 선택)하고 모자란 컷은 AI 이미지로. 실사·지브리풍·웹툰·이슈툰 4가지 화풍, 2×2·세로 1×4 합본, 컷별 해요체 문구, 합본/컷 PNG 저장. |
+| **3. 카드뉴스** | 4·6·8·10장, 분할형/전면형, 7가지 테마·비율. **표지부터 마지막 장까지** 기사 본문 이미지와 본문 기반 AI 이미지를 고르게 배치합니다. 카드별 문구 편집·ZIP 저장. |
+| **4. 채널** | 6개 채널(쓰레드·X·인스타·유튜브·틱톡·네이버) 문구·해시태그·첫 댓글 링크 패키지, 계정 자동입력, 9:16 슬라이드 영상. |
+
+### 이미지가 좋아진 방식
+
+1. **기사 본문 이미지 정제 추출** (`functions/api/_lib.js`의 `extractArticleImages`) — 본문 영역(`articleBody`·`bo_v_atc`·`article-body` 등)만 보고, 사이드바 추천기사·관련기사 썸네일·광고 배너·기자 프로필·1px 추적 픽셀은 걸러냅니다. 지연 로딩(`data-src`) 사진도 포함하고, 같은 사진의 CDN 중복은 하나로 묶습니다. 브라우저 캔버스에서 CORS 없이 그리도록 `/api/proxy-image`가 base64로 중계합니다.
+2. **기사 본문 기반 영문 프롬프트** (`/api/build-prompts`) — 기사 제목·본문을 Workers AI(`@cf/meta/llama-3.2-3b-instruct`, 실패 시 다른 무료 텍스트 모델 → 시각 사전 폴백)로 보내 컷·카드마다 다른 **영문 장면 프롬프트**를 만듭니다. 한글이 섞이면 기사 기준 장면으로 되돌리고, 글자를 그리라는 표현은 걸러냅니다. 결과는 7일 캐시합니다.
+3. **이미지 생성** (`/api/generate-image`) — Workers AI `flux-1-schnell` → 무료 Pollinations 순서로 시도하고, 모두 실패하면 스타일별 Canvas 아트로 대체합니다. 이미지에는 글자가 들어가지 않습니다.
+4. **카드뉴스 전 카드 배치** — 기사 이미지를 카드 순서대로 먼저 배분하고, 남는 카드만 본문 기반 AI 이미지로 채워 표지에만 몰리지 않게 합니다.
 
 ## 에이전트
 
@@ -56,12 +77,24 @@ node scripts/catalog.mjs --check  # 둘이 어긋나면 exit 1
 ## 파일
 
 ```
-index.html        화면 구조
-app.css           디자인 시스템 · 반응형
-app.js            분석 엔진 · 협업 턴 생성 · 리포트 · 팀 투입 · 저장
+index.html        화면 구조 (모드 탭 + 두 모드의 마크업)
+app.css           디자인 시스템 · 반응형 · 모드 바
+app.js            분석 엔진 · 협업 턴 생성 · 리포트 · 팀 투입 · 저장 (협업 모드)
+mode.js           🤖/🎨 모드 전환, 스튜디오 모듈 지연 로드
 agents-catalog.json  에이전트·역할 원본 데이터 (일일 스캔으로 갱신)
 agents-catalog.js    위 JSON의 실행용 사본 (자동 생성)
+studio/           🎨 4컷만화 · 카드뉴스 스튜디오 (ES 모듈)
+  app.js            화면 컨트롤러 (미러링·4컷·카드뉴스·채널)
+  plan.js           기사 분석 · 4컷/카드 스토리보드 · 채널 문구
+  canvas.js         컷 렌더러(Canvas) · 이미지 로더
+  cards.js          카드뉴스 렌더러
+  video.js          9:16 슬라이드 영상
+  style.css         원본 스타일 (참고용)
+  style-scoped.css  #studioRoot 아래로 가둔 배포용 스타일 (자동 생성)
+functions/api/    Cloudflare Pages Functions — mirror·feed·build-prompts·generate-image·proxy-image 등
+wrangler.toml     Pages 설정 · Workers AI 바인딩(AI)
 scripts/catalog.mjs  JSON → JS 사본 생성·검사
+scripts/scope-css.mjs studio/style.css → style-scoped.css (전역 선택자 격리)
 scripts/build.mjs    dist/ 생성 (배포용 파일만 복사)
 ```
 
@@ -77,15 +110,17 @@ python3 -m http.server 8000      # 또는 아무 정적 서버
 `.local-tests/agent-collab-studio/`에 있습니다(저장소에는 포함하지 않음).
 
 ```bash
-node .local-tests/agent-collab-studio/test.js     # jsdom: 분석·10턴·리포트·개입·저장·가이드·팀 투입·역할 (385개)
-node .local-tests/agent-collab-studio/ui.test.js  # headless: 조작·다운로드·오버플로·콘솔 에러·가이드·팀 투입 (129개)
+node .local-tests/agent-collab-studio/test.js            # jsdom: 협업 엔진·가이드·팀 투입·모드 탭·Functions 구성 (423개)
+node .local-tests/agent-collab-studio/functions.test.mjs  # 본문 이미지 정제 추출·영문 프롬프트·이미지 폴백 (27개)
+node .local-tests/agent-collab-studio/ui.test.js          # headless: 협업 화면 조작·다운로드·오버플로·콘솔 에러·모드 전환 (138개)
+node .local-tests/agent-collab-studio/ui-studio.test.js   # headless: 미러링→4컷→카드뉴스 전 카드 이미지→390px (25개)
 ```
 
 ## 배포
 
 ```bash
 node scripts/build.mjs
-npx wrangler pages deploy dist --project-name agent-collab-studio
+npx wrangler pages deploy dist --project-name agent-collab-studio --branch main
 ```
 
-Cloudflare Pages 프로젝트 `agent-collab-studio`에 정적 업로드합니다.
+Cloudflare Pages 프로젝트 `agent-collab-studio`에 정적 자산과 `functions/`를 함께 업로드합니다. Workers AI 바인딩(`AI`)은 `wrangler.toml`의 `[ai]`로 선언하며, 대시보드 **Settings → Functions → AI bindings**에도 `AI`가 있어야 `/api/build-prompts`·`/api/generate-image`가 Workers AI를 씁니다(없으면 폴백).

@@ -1,0 +1,61 @@
+/* /api/health — 배포 상태·기능 확인 */
+import { MAIN_CATEGORY_IDS } from "./feed.js";
+import { providers } from "./auth/_session.js";
+import { PARTNER_TRACKING, trackingFromEnv } from "./_lib.js";
+
+export async function onRequest(context) {
+  const env = (context && context.env) || {};
+  const tracking = trackingFromEnv(env);
+  const data = {
+    ok: true,
+    service: "agent-collab-studio",
+    version: "1.4.0",
+    modes: ["agent", "studio"],
+    time: new Date().toISOString(),
+    features: {
+      unifiedStudio: true,
+      mirror: true,
+      bodyImages: 8,
+      kv: Boolean(env.ARCHIVE && typeof env.ARCHIVE.get === "function"),
+      freeImage: true,
+      workersAi: Boolean(env.AI && typeof env.AI.run === "function"),
+      byok: ["openai", "gemini"],
+      feed: true,
+      feedCategories: ["all", ...MAIN_CATEGORY_IDS],
+      feedCategoryCount: MAIN_CATEGORY_IDS.length,
+      feedLimit: 20,
+      partners: true,
+      partnersSeed: 20,
+      partnersTracking: tracking,
+      trackingDefault: PARTNER_TRACKING,
+      cards: [4, 6, 8, 10],
+      defaultCards: 8,
+      cardLayouts: ["split", "full"],
+      cardTitleScale: 0.9,
+      cardBodyScale: 0.7,
+      imageModes: ["ai", "article"],
+      cardImageModes: ["ai", "article"],
+      cardImages: true,
+      promptBuilder: true,
+      promptModels: [
+        "@cf/meta/llama-3.1-8b-instruct",
+        "@cf/qwen/qwen2.5-7b-instruct",
+        "@cf/meta/llama-3.2-3b-instruct",
+      ],
+      englishOnlyPrompts: true,
+      autoGenerate: true,
+      channels: 6,
+      channelAccounts: true,
+      auth: true,
+      oauth: providers(env),
+    },
+  };
+  return new Response(JSON.stringify(data), {
+    status: 200,
+    headers: {
+      "content-type": "application/json; charset=utf-8",
+      "cache-control": "no-store",
+      "x-robots-tag": "noindex, nofollow",
+    },
+  });
+}
