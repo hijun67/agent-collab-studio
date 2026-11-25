@@ -1633,7 +1633,7 @@
     { id: 'workers-ai', label: 'Cloudflare Workers AI', short: 'Workers AI', free: '무료 10,000 neurons/일', keyless: true, models: ['@cf/meta/llama-3.3-70b-instruct-fp8-fast', '@cf/qwen/qwen3.8-27b', '@cf/google/gemma-4-26b-a4b-it', '@cf/meta/llama-3.1-8b-instruct-fast'] },
     { id: 'groq', label: 'Groq', short: 'Groq', free: '무료 1,000 req/일', keyHint: 'gsk_…', help: 'https://console.groq.com/keys', models: ['llama-3.3-70b-versatile', 'openai/gpt-oss-120b'] },
     { id: 'gemini', label: 'Google Gemini', short: 'Gemini', free: '무료 티어', keyHint: 'AIza…', help: 'https://aistudio.google.com/app/apikey', models: ['gemini-3.5-flash-lite', 'gemini-3.8-flash'] },
-    { id: 'openrouter', label: 'OpenRouter :free', short: 'OpenRouter', free: '무료 :free 모델 50 req/일', keyHint: 'sk-or-…', help: 'https://openrouter.ai/keys', models: ['meta-llama/llama-3.3-70b-instruct:free'] },
+    { id: 'openrouter', label: 'OpenRouter :free', short: 'OpenRouter', free: '무료 :free 모델 50 req/일', keyHint: 'sk-or-…', help: 'https://openrouter.ai/keys', models: ['google/gemma-4-26b-a4b-it:free', 'baidu/ernie-5.5-flash-preview:free', 'nvidia/nemotron-3-ultra-550b-a55b:free'] },
     { id: 'cerebras', label: 'Cerebras', short: 'Cerebras', free: '무료 1M tokens/일', keyHint: 'csk-…', help: 'https://cloud.cerebras.ai/', models: ['llama-3.3-70b'] },
     { id: 'mistral', label: 'Mistral', short: 'Mistral', free: '무료 실험 티어', keyHint: '…', help: 'https://console.mistral.ai/api-keys/', models: ['mistral-small-latest'] },
     { id: 'openai', label: 'OpenAI', short: 'OpenAI', free: '유료(BYOK)', keyHint: 'sk-…', paid: true, help: 'https://platform.openai.com/api-keys', models: ['gpt-4o-mini'] }

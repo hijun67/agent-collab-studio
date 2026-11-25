@@ -70,11 +70,9 @@ export const AI_POOL = [
     keyHint: "sk-or-…",
     help: "https://openrouter.ai/keys",
     models: [
-      "meta-llama/llama-3.3-70b-instruct:free",
-      "deepseek/deepseek-chat-v3.1:free",
-      "google/gemma-3-27b-it:free",
-      "qwen/qwen3-235b-a22b:free",
-      "mistralai/mistral-small-3.2-24b-instruct:free",
+      "google/gemma-4-26b-a4b-it:free",
+      "baidu/ernie-5.5-flash-preview:free",
+      "nvidia/nemotron-3-ultra-550b-a55b:free",
     ],
   },
   {
