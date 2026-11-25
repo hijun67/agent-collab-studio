@@ -903,7 +903,7 @@
     if (stage === 2) {
       const html = fb +
         '<p>' + (scopeWord(p) ? esc(scopeWord(p)) + ' ' : '') + '"' + esc(k[0] || '핵심 결과') + '"' + josa(k[0] || '핵심', '을') + ' 기준으로 5단계로 쪼갰습니다. ' + esc(scheduleLine(p)) + '</p>' +
-        bullets(p.steps.map((s) => '<b>' + esc(s.name) + '</b> <span style="color:#7d8ea6">· ' + esc(s.when) + ' · ' + esc(s.owner) + '</span><br>' + s.detail + '<br><span style="color:#7d8ea6">산출물: ' + esc(s.output) + '</span>'), 'num-list') +
+        bullets(p.steps.map((s) => '<b>' + esc(s.name) + '</b> <span class="sub-note">· ' + esc(s.when) + ' · ' + esc(s.owner) + '</span><br>' + s.detail + '<br><span class="sub-note">산출물: ' + esc(s.output) + '</span>'), 'num-list') +
         '<p><b>필요한 리소스</b></p>' + bullets(p.resources.map((r) => esc(r))) +
         '<p><b>먼저 확인할 것</b> — 계획을 세우기 전에 사실로 확인해야 하는 항목입니다.</p>' + bullets(p.research.slice(0, 2).map((r) => esc(r))) +
         '<div class="callout"><b>오늘의 첫 30분</b> ' + esc(p.steps[0].detail) + '</div>';
@@ -992,7 +992,7 @@
       const days = firstThreeDays(p);
       const html = fb +
         '<p>바로 손이 움직이도록 첫 3일을 시간 단위로 잘랐습니다. ' + (p.deadline ? esc(p.deadline.label) : '2주') + ' 계획의 출발점입니다.</p>' +
-        bullets(days.map((d) => '<b>' + esc(d.label) + '</b> — ' + esc(d.text) + '<br><span style="color:#7d8ea6">완료 판단: ' + esc(d.done) + '</span>'), 'num-list') +
+        bullets(days.map((d) => '<b>' + esc(d.label) + '</b> — ' + esc(d.text) + '<br><span class="sub-note">완료 판단: ' + esc(d.done) + '</span>'), 'num-list') +
         '<p><b>루틴 고정</b> ' + esc(routineAdvice(p)) + '</p>' +
         '<p><b>도구 준비</b> ' + p.resources.map((r) => esc(r)).join(' · ') + '</p>' +
         '<div class="callout"><b>막히면</b> 30분 이상 진전이 없으면 범위를 더 자르고 피클에게 다시 조율을 요청하세요.</div>';
@@ -2848,7 +2848,7 @@
       tag: '지시',
       stage: Math.max(1, state.cursor),
       time: nowTime(),
-      html: '<p>' + esc(t) + '</p>' + (r.changes.length ? '<p style="margin:6px 0 0;font-size:11px;color:#a7f3d0">반영: ' + esc(r.changes.join(' · ')) + '</p>' : '')
+      html: '<p>' + esc(t) + '</p>' + (r.changes.length ? '<p class="reflect-note" style="margin:6px 0 0;font-size:11px">반영: ' + esc(r.changes.join(' · ')) + '</p>' : '')
     });
     pendingFresh = t;
     renderAll();

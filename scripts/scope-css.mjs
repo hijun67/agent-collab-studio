@@ -20,6 +20,14 @@ function scopeSelector(sel) {
   const s = sel.trim();
   if (!s) return s;
   if (s === ':root') return SCOPE;
+  // 테마 규칙: :root[data-theme="light"] 는 실제 속성이 <html> 에 붙으므로
+  // html[data-theme="light"] 아래의 두 루트로 옮긴다.
+  const themed = /^:root(\[[^\]]*\])(.*)$/.exec(s);
+  if (themed) {
+    const rest = themed[2].trim();
+    const base = 'html' + themed[1] + ' ' + SCOPE;
+    return rest ? base + ' ' + rest : base;
+  }
   if (s === 'html' || s === 'body') return BODY_SCOPE;
   if (/^body(\.|$| )/.test(s)) return BODY_SCOPE + s.slice(4);
   if (/^html(\.|$| )/.test(s)) return BODY_SCOPE + s.slice(4);

@@ -9,7 +9,7 @@ export async function onRequest(context) {
   const data = {
     ok: true,
     service: "agent-collab-studio",
-    version: "2.0.0",
+    version: "2.1.0",
     modes: ["agent", "studio"],
     time: new Date().toISOString(),
     features: {

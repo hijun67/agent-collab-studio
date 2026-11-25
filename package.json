@@ -1,6 +1,6 @@
 {
   "name": "agent-collab-studio",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "private": true,
   "description": "피클·제미나이 태스크·코덱스 협업 스튜디오 — 무료 AI 풀 자동 로테이션 + 실제 파일 생성·GitHub Pages/Cloudflare Pages 배포",
   "type": "module",
