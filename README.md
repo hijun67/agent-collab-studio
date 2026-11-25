@@ -193,7 +193,7 @@ Playwright 테스트는 이 환경의 Chromium 라이브러리 경로가 필요�
 
 ## 배포
 
-**자동 (기본)** — Cloudflare Pages 프로젝트 `agent-collab-studio`는 GitHub `hijun67/agent-collab-studio`의 `main`과 연결되어 있어, **`main`에 푸시하면 자동으로 빌드·배포**됩니다(무료 플랜: 월 500회 빌드).
+**자동 (기본)** — Cloudflare Pages 프로젝트 `agent-collab-studio`는 GitHub `hijun67/agent-collab-studio`의 `main`과 연결되어 있어, **`main`에 푸시하면 자동으로 빌드·배포**됩니다(무료 플랜: 월 500회 빌드, 빌드 명령 `npm run build`, 출력 `dist`). 빌드가 실패하면 새 버전은 올라가지 않고 **직전 정상 배포가 계속 서비스**됩니다.
 
 ```bash
 git push origin main      # 자동 빌드·배포 트리거
