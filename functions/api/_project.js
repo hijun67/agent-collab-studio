@@ -1,4 +1,4 @@
-/* Agent Collab Studio v2.2 | 실제 프로젝트 파일 생성 — 정규화 · 스마트 폴백 생성기 · 프롬프트
+/* Agent Collab Studio v2.3 | 실제 프로젝트 파일 생성 — 정규화 · 스마트 폴백 생성기 · 프롬프트
  *
  *  `/api/generate-project` 가 무료 AI 풀에 보낼 프롬프트를 만들고,
  *  AI 응답(JSON 파일 세트)을 안전하게 다듬습니다.
@@ -366,7 +366,7 @@ function pageHtml(ctx, body, tag) {
     '</head>\n<body>\n<div class="wrap">\n' +
     headerBlock(ctx) + '\n' +
     body + '\n' +
-    '<footer class="foot"><span>' + escapeHtml(tag) + ' · Agent Collab Studio v2.2</span>' +
+    '<footer class="foot"><span>' + escapeHtml(tag) + ' · Agent Collab Studio v2.3</span>' +
     '<span>입력한 내용은 이 브라우저(localStorage)에만 저장됩니다.</span></footer>\n' +
     '</div>\n<script src="app.js"></script>\n</body>\n</html>\n';
 }
@@ -569,7 +569,7 @@ function pomodoroApp(ctx) {
 .todo .del:hover { color: var(--danger); background: var(--accent-soft); }
 `;
 
-  const js = `/* ${ctx.title} — 포모도로 타이머 + 오늘의 할 일 (Agent Collab Studio v2.2 폴백 생성) */
+  const js = `/* ${ctx.title} — 포모도로 타이머 + 오늘의 할 일 (Agent Collab Studio v2.3 폴백 생성) */
 (function () {
   'use strict';
   var KEY = '${KEY}';
@@ -921,7 +921,7 @@ tr:last-child td { border-bottom: 0; }
 @media (max-width: 520px) { .fields { grid-template-columns: 1fr; } .result-grid { grid-template-columns: 1fr; } }
 `;
 
-  const js = `/* ${ctx.title} — 실시간 계산기 (Agent Collab Studio v2.2 폴백 생성) */
+  const js = `/* ${ctx.title} — 실시간 계산기 (Agent Collab Studio v2.3 폴백 생성) */
 (function () {
   'use strict';
   var KEY = '${KEY}';
@@ -1168,7 +1168,7 @@ function todoApp(ctx) {
 .item .del:hover { color: var(--danger); background: var(--accent-soft); }
 `;
 
-  const js = `/* ${ctx.title} — 할 일 · 습관 트래커 (Agent Collab Studio v2.2 폴백 생성) */
+  const js = `/* ${ctx.title} — 할 일 · 습관 트래커 (Agent Collab Studio v2.3 폴백 생성) */
 (function () {
   'use strict';
   var KEY = '${KEY}';
@@ -1377,7 +1377,7 @@ function quizApp(ctx) {
 @media (max-width: 720px) { .flash-inner { min-height: 180px; } }
 `;
 
-  const js = `/* ${ctx.title} — 플래시카드 · 퀴즈 (Agent Collab Studio v2.2 폴백 생성) */
+  const js = `/* ${ctx.title} — 플래시카드 · 퀴즈 (Agent Collab Studio v2.3 폴백 생성) */
 (function () {
   'use strict';
   var KEY = '${KEY}';
@@ -1566,7 +1566,7 @@ function notesApp(ctx) {
 @media (max-width: 860px) { .notes { grid-template-columns: 1fr; } .note-list { max-height: 220px; } }
 `;
 
-  const js = `/* ${ctx.title} — 메모 · 노트 (Agent Collab Studio v2.2 폴백 생성) */
+  const js = `/* ${ctx.title} — 메모 · 노트 (Agent Collab Studio v2.3 폴백 생성) */
 (function () {
   'use strict';
   var KEY = '${KEY}';
@@ -1832,7 +1832,7 @@ function directoryApp(ctx) {
 .modal-foot { margin-top: 4px; }
 `;
 
-  const js = `/* ${ctx.title} — 목록 · 큐레이션 (Agent Collab Studio v2.2 폴백 생성) */
+  const js = `/* ${ctx.title} — 목록 · 큐레이션 (Agent Collab Studio v2.3 폴백 생성) */
 (function () {
   'use strict';
   var KEY = '${KEY}';
@@ -2114,7 +2114,7 @@ function dashboardApp(ctx) {
 .saved { font-size: 11px; color: var(--sub); }
 `;
 
-  const js = `/* ${ctx.title} — 실행 대시보드 (Agent Collab Studio v2.2 폴백 생성) */
+  const js = `/* ${ctx.title} — 실행 대시보드 (Agent Collab Studio v2.3 폴백 생성) */
 (function () {
   'use strict';
   var KEY = '${KEY}';
@@ -2228,7 +2228,7 @@ ${themeJs(KEY)}
 function readmeFor(ctx, appName, features) {
   const lines = [];
   lines.push("# " + ctx.title, "");
-  lines.push("> Agent Collab Studio v2.2 가 만든 **" + appName + "** 웹앱입니다. 설치 없이 브라우저에서 바로 동작합니다.", "");
+  lines.push("> Agent Collab Studio v2.3 가 만든 **" + appName + "** 웹앱입니다. 설치 없이 브라우저에서 바로 동작합니다.", "");
   lines.push("## 소개", "");
   if (ctx.goal) lines.push("- 목표: " + ctx.goal);
   if (ctx.context) lines.push("- 배경·제약: " + ctx.context);
@@ -2262,7 +2262,7 @@ function readmeFor(ctx, appName, features) {
   lines.push("- 저장 데이터는 브라우저 localStorage 에만 남고 서버로 전송되지 않습니다.");
   lines.push("");
   lines.push("---", "");
-  lines.push("_생성: Agent Collab Studio v2.2 (무료 AI 풀 · 스마트 로컬 생성기)_");
+  lines.push("_생성: Agent Collab Studio v2.3 (무료 AI 풀 · 스마트 로컬 생성기)_");
   return lines.join("\n");
 }
 
