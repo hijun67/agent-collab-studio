@@ -426,6 +426,7 @@ button { font: inherit; cursor: pointer; }
   display: inline-flex; align-items: center; justify-content: center; gap: 6px;
   border: 1px solid var(--line); background: var(--card); color: var(--txt);
   border-radius: 11px; padding: 9px 14px; font-size: 13px; font-weight: 600;
+  white-space: nowrap; flex: 0 0 auto;
   transition: border-color .15s, background .15s, color .15s;
 }
 .btn:hover { border-color: var(--accent); }
@@ -555,6 +556,7 @@ function pomodoroApp(ctx) {
 .todo-head h2 { font-size: 14px; }
 .todo-form { display: flex; gap: 8px; margin: 12px 0 10px; }
 .todo-form input { flex: 1 1 auto; min-width: 0; }
+.todo-form .btn { flex: 0 0 auto; }
 .filters { display: flex; gap: 6px; margin-bottom: 10px; flex-wrap: wrap; }
 .todo-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
 .todo { display: flex; align-items: center; gap: 8px; border: 1px solid var(--line); border-radius: 11px; padding: 8px 10px; }
