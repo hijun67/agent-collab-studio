@@ -268,6 +268,8 @@ export async function onRequest(context) {
       if (attemptProviders.length <= 1) message += " 다른 무료 AI 키(Groq·Gemini 등)를 넣으면 소진 직후 자동으로 이어받습니다.";
     } else if (/deprecated|5028|model_gone/i.test(joined)) {
       message = "이 모델은 제공이 종료되었습니다. 다음 모델로 다시 시도해 주세요.";
+    } else if (tried.length && tried.every((t) => t && typeof t === 'object' && t.kind === 'auth')) {
+      message = "무료 AI 키를 인증하지 못했습니다 — " + joined + ". AI 설정에서 각 프로바이더 키를 다시 확인해 주세요.";
     } else if (/JSON|형식 불일치/i.test(joined) && !result.message) {
       message = "AI가 정한 형식으로 답하지 않아 이 턴은 로컬 엔진으로 만들었습니다.";
     } else if (result.code === "bad_output" && joined) {

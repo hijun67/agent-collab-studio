@@ -320,7 +320,13 @@ export function classifyFailure(status, text) {
   ) {
     return "quota";
   }
-  if (status === 401 || status === 403 || /invalid api key|unauthorized|authentication|permission/i.test(body)) return "auth";
+  if (
+    status === 401 ||
+    status === 403 ||
+    /invalid api key|api key not valid|api_key_invalid|incorrect api key|unauthorized|authentication|permission/i.test(body)
+  ) {
+    return "auth";
+  }
   if (/deprecated|no such model|model not found|does not exist|decommission|5028/i.test(body)) return "model_gone";
   if (status >= 500) return "server";
   if (status === 404) return "model_gone";
