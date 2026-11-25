@@ -494,22 +494,26 @@ export async function runPool(opts) {
       fetchImpl,
       env,
     });
-    /* 5xx(용량 초과·일시 창애)는 같은 모델에 한 번만 더 묻는다 — Gemini 무료 티어는 503(수요 급증)이 잦다. */
-    if (!result.ok && result.kind === "server" && deadline - Date.now() > 2200) {
-      await new Promise((resolve) => setTimeout(resolve, 350));
+    /* 5xx(용량 초과·일시 창애)는 잠깐씩 쉬며 다시 묻는다 — Gemini 무료 티어는 503(수요 급증)이 잦다.
+       남은 프로바이더가 있으면 1번만, 마지막 살아 있는 프로바이더면 2번까지 시도한다. */
+    const lastLive = pendingProviders(attempts, index, dead) === 1;
+    const maxServerRetries = lastLive ? 2 : 1;
+    for (let retried = 0; !result.ok && result.kind === "server" && retried < maxServerRetries; retried += 1) {
+      const leftBefore = deadline - Date.now();
+      if (leftBefore < 2600) break;
+      await new Promise((resolve) => setTimeout(resolve, 400 * (retried + 1)));
       const left = deadline - Date.now();
-      if (left > 1800) {
-        const retry = await callProvider({
-          attempt,
-          messages,
-          maxTokens,
-          temperature,
-          timeoutMs: Math.min(perAttemptMs, left),
-          fetchImpl,
-          env,
-        });
-        if (retry.ok) result = retry;
-      }
+      if (left < 1800) break;
+      const retry = await callProvider({
+        attempt,
+        messages,
+        maxTokens,
+        temperature,
+        timeoutMs: Math.min(perAttemptMs, left),
+        fetchImpl,
+        env,
+      });
+      if (retry.ok) result = retry;
     }
     const ms = Date.now() - started;
 
