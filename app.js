@@ -1470,9 +1470,7 @@
 
   function aiProvenanceText(ai) {
     if (!ai) return '';
-    const label = ai.provider && ai.provider.indexOf('byok') === 0
-      ? 'BYOK · ' + String(ai.provider).replace('byok-', '')
-      : 'Workers AI';
+    const label = providerLabelText(ai.provider || 'workers-ai');
     return 'AI 종합 · ' + label + (ai.model ? ' (' + ai.model + ')' : '') + ' — 10턴 협업 기록을 실제 AI가 다시 정리했습니다';
   }
 
@@ -1605,6 +1603,135 @@
   ];
   let aiConfig = { provider: 'auto', key: '', model: '' };
 
+  /* ── 무료 AI 풀 · 당일 소진 마킹 ────────────────────────────────
+     키는 이 브라우저(localStorage)에만 저장한다. 한 프로바이더가 429·4006·quota 를 돌려주면
+     그 프로바이더(또는 모델)를 오늘 날짜로 표시해 두고 다음 턴부터 건너뛴다. */
+  const LS_POOL = 'acs.ai.v2';
+  const LS_QUOTA = 'acs.ai.quota.v1';
+  const LS_OLLAMA = 'acs.ollama.v1';
+  const AI_POOL_ENDPOINT = '/api/ai-pool';
+  const PROVIDER_LABELS = {
+    'workers-ai': 'Workers AI', groq: 'Groq', gemini: 'Gemini', openrouter: 'OpenRouter',
+    cerebras: 'Cerebras', mistral: 'Mistral', openai: 'OpenAI', ollama: 'Ollama', local: '로컬'
+  };
+  /* 서버 GET 이 실패해도 풀 목록을 보여 줄 수 있게 두는 기본값. */
+  const POOL_FALLBACK = [
+    { id: 'workers-ai', label: 'Cloudflare Workers AI', short: 'Workers AI', free: '무료 10,000 neurons/일', keyless: true, models: ['@cf/meta/llama-3.3-70b-instruct-fp8-fast', '@cf/qwen/qwen3.8-27b', '@cf/google/gemma-4-26b-a4b-it', '@cf/meta/llama-3.1-8b-instruct-fast'] },
+    { id: 'groq', label: 'Groq', short: 'Groq', free: '무료 1,000 req/일', keyHint: 'gsk_…', help: 'https://console.groq.com/keys', models: ['llama-3.3-70b-versatile', 'openai/gpt-oss-120b'] },
+    { id: 'gemini', label: 'Google Gemini', short: 'Gemini', free: '무료 티어', keyHint: 'AIza…', help: 'https://aistudio.google.com/app/apikey', models: ['gemini-2.5-flash', 'gemini-2.5-flash-lite'] },
+    { id: 'openrouter', label: 'OpenRouter :free', short: 'OpenRouter', free: '무료 :free 모델 50 req/일', keyHint: 'sk-or-…', help: 'https://openrouter.ai/keys', models: ['meta-llama/llama-3.3-70b-instruct:free'] },
+    { id: 'cerebras', label: 'Cerebras', short: 'Cerebras', free: '무료 1M tokens/일', keyHint: 'csk-…', help: 'https://cloud.cerebras.ai/', models: ['llama-3.3-70b'] },
+    { id: 'mistral', label: 'Mistral', short: 'Mistral', free: '무료 실험 티어', keyHint: '…', help: 'https://console.mistral.ai/api-keys/', models: ['mistral-small-latest'] },
+    { id: 'openai', label: 'OpenAI', short: 'OpenAI', free: '유료(BYOK)', keyHint: 'sk-…', paid: true, help: 'https://platform.openai.com/api-keys', models: ['gpt-4o-mini'] }
+  ];
+  let poolRows = POOL_FALLBACK.slice();
+  let poolState = { keys: {}, usage: {}, probe: {}, ollama: { enabled: false, url: 'http://localhost:11434', model: 'llama3.2' } };
+  let poolQuota = { date: '', until: {} };
+  let poolBusy = false;
+
+  function todayKey() {
+    const d = new Date();
+    const p = (n) => (n < 10 ? '0' : '') + n;
+    return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate());
+  }
+
+  function loadPool() {
+    const saved = readJSON(LS_POOL, null);
+    if (saved && typeof saved === 'object') {
+      poolState = {
+        keys: saved.keys && typeof saved.keys === 'object' ? saved.keys : {},
+        usage: saved.usage && typeof saved.usage === 'object' ? saved.usage : {},
+        probe: {},
+        ollama: Object.assign({ enabled: false, url: 'http://localhost:11434', model: 'llama3.2' }, saved.ollama || {})
+      };
+    }
+    const quota = readJSON(LS_QUOTA, null);
+    if (quota && quota.date === todayKey() && quota.until && typeof quota.until === 'object') {
+      poolQuota = { date: quota.date, until: quota.until };
+    } else {
+      poolQuota = { date: todayKey(), until: {} };
+    }
+  }
+
+  function savePool() {
+    try {
+      localStorage.setItem(LS_POOL, JSON.stringify({ keys: poolState.keys, usage: poolState.usage, ollama: poolState.ollama }));
+    } catch (e) { /* 저장 실패는 무시 */ }
+  }
+
+  function saveQuota() {
+    try { localStorage.setItem(LS_QUOTA, JSON.stringify(poolQuota)); } catch (e) { /* 무시 */ }
+  }
+
+  function quotaToday() {
+    if (poolQuota.date !== todayKey()) poolQuota = { date: todayKey(), until: {} };
+    return poolQuota.until;
+  }
+
+  function poolSkip() {
+    return Object.keys(quotaToday());
+  }
+
+  function markExhausted(list) {
+    if (!Array.isArray(list) || !list.length) return;
+    const until = quotaToday();
+    let changed = false;
+    list.forEach((key) => {
+      const text = String(key || '').trim();
+      if (!text) return;
+      until[text] = Date.now();
+      changed = true;
+    });
+    poolQuota.date = todayKey();
+    if (changed) { saveQuota(); renderPool(); }
+  }
+
+  function resetQuota() {
+    poolQuota = { date: todayKey(), until: {} };
+    saveQuota();
+    renderPool();
+  }
+
+  function providerExhausted(id) {
+    const until = quotaToday();
+    return Object.keys(until).some((key) => key === id || key.indexOf(id + ':') === 0);
+  }
+
+  function bumpUsage(provider) {
+    if (!provider) return;
+    const id = String(provider).replace(/^byok-/, '');
+    poolState.usage[id] = (poolState.usage[id] || 0) + 1;
+    savePool();
+  }
+
+  function providerLabelText(provider) {
+    if (!provider) return 'AI';
+    if (String(provider).indexOf('byok-') === 0) return 'BYOK · ' + (PROVIDER_LABELS[String(provider).slice(5)] || String(provider).slice(5));
+    return PROVIDER_LABELS[provider] || provider;
+  }
+
+  function providerBadge(provider) {
+    if (!provider) return 'AI';
+    if (String(provider).indexOf('byok-') === 0) return providerLabelText(provider);
+    return PROVIDER_LABELS[provider] || provider;
+  }
+
+  function poolKeys() {
+    const out = {};
+    Object.keys(poolState.keys || {}).forEach((id) => {
+      const key = String(poolState.keys[id] || '').trim();
+      if (key) out[id] = key;
+    });
+    return out;
+  }
+
+  function poolSummaryText() {
+    const keyed = Object.keys(poolKeys()).length;
+    const exhausted = poolRows.filter((row) => providerExhausted(row.id)).length;
+    const ollama = poolState.ollama.enabled ? 1 : 0;
+    return 'AI ' + (poolRows.length + 1 + ollama) + '개 · 키 ' + keyed + ' · 오늘 소진 ' + exhausted;
+  }
+
   function aiAvailable() {
     return typeof fetch === 'function' && typeof location !== 'undefined' && /^https?:/.test(location.protocol);
   }
@@ -1633,8 +1760,144 @@
     };
     if (aiConfig.provider !== 'auto' && !aiConfig.key) aiConfig.provider = 'auto';
     try { localStorage.setItem(LS_AI, JSON.stringify(aiConfig)); } catch (e) { /* 저장 실패는 무시 */ }
+    /* 고정 엔진에 넣은 키는 풀에도 같이 둔다(같은 프로바이더를 두 곳에서 따로 넣지 않게). */
+    if (aiConfig.provider !== 'auto' && aiConfig.key) {
+      poolState.keys[aiConfig.provider] = aiConfig.key;
+      savePool();
+      renderPool();
+    }
     renderAiStatus();
     return aiConfig;
+  }
+
+  /* ── 무료 AI 풀 화면 ────────────────────────────────────────── */
+  function poolStatus(def) {
+    if (def.id === 'local') return { tone: 'is-local', label: '항상 사용' };
+    if (def.id === 'ollama') {
+      const probe = poolState.probe.ollama;
+      if (!poolState.ollama.enabled) return { tone: 'is-wait', label: '대기' };
+      if (probe && probe.ok) return { tone: 'is-ok', label: '연결됨' };
+      if (probe && probe.ok === false) return { tone: 'is-warn', label: '연결 안 됨' };
+      return { tone: 'is-wait', label: '확인 필요' };
+    }
+    if (providerExhausted(def.id)) return { tone: 'is-quota', label: '오늘 한도 소진' };
+    const probe = poolState.probe[def.id];
+    const hasKey = Boolean(String((poolState.keys || {})[def.id] || '').trim()) || Boolean(def.serverKey);
+    if (def.keyless) {
+      if (probe && probe.ok) return { tone: 'is-ok', label: '연결됨' };
+      if (probe && probe.ok === false) return { tone: 'is-warn', label: '연결 안 됨' };
+      return def.available === false ? { tone: 'is-warn', label: '미연결' } : { tone: 'is-ok', label: '연결됨' };
+    }
+    if (!hasKey) return { tone: 'is-wait', label: '키 필요' };
+    if (probe && probe.ok) return { tone: 'is-ok', label: '연결됨' };
+    if (probe && probe.ok === false) return { tone: 'is-warn', label: '확인 실패' };
+    return { tone: 'is-ready', label: def.serverKey ? '서버 키' : '키 저장됨' };
+  }
+
+  function renderPool() {
+    const list = $('#poolList');
+    if (!list) return;
+    const rows = poolRows.slice();
+    const html = rows.map((def) => {
+      const status = poolStatus(def);
+      const use = poolState.usage[def.id] || 0;
+      const hasInput = !def.keyless;
+      const keyValue = String((poolState.keys || {})[def.id] || '');
+      return '<div class="pool-row" data-provider="' + esc(def.id) + '">' +
+        '<div class="pool-main">' +
+        '<span class="pool-dot ' + status.tone + '" aria-hidden="true"></span>' +
+        '<div class="pool-id"><b>' + esc(def.label || def.short || def.id) + '</b><span>' + esc(def.free || '') + '</span></div>' +
+        '<span class="pool-status ' + status.tone + '">' + esc(status.label) + '</span>' +
+        (use ? '<span class="pool-use">' + use + '회</span>' : '') +
+        '</div>' +
+        (hasInput
+          ? '<div class="pool-key"><input data-pool-key="' + esc(def.id) + '" type="password" autocomplete="off" spellcheck="false" placeholder="' + esc((def.keyHint || 'API 키') + ' (이 브라우저에만 저장)') + '" value="' + esc(keyValue) + '" />' +
+            (def.help ? '<a href="' + esc(def.help) + '" target="_blank" rel="noopener noreferrer">키 발급 ↗</a>' : '') + '</div>'
+          : '') +
+        '</div>';
+    }).join('');
+
+    const ollama = poolState.ollama;
+    const oStatus = poolStatus({ id: 'ollama' });
+    const localStatus = poolStatus({ id: 'local' });
+    const extra =
+      '<div class="pool-row" data-provider="ollama">' +
+        '<div class="pool-main">' +
+        '<span class="pool-dot ' + oStatus.tone + '" aria-hidden="true"></span>' +
+        '<div class="pool-id"><b>로컬 Ollama</b><span>내 컴퓨터 · 무료 · 무제한</span></div>' +
+        '<span class="pool-status ' + oStatus.tone + '">' + esc(oStatus.label) + '</span>' +
+        '<label class="pool-toggle"><input type="checkbox" id="poolOllamaOn"' + (ollama.enabled ? ' checked' : '') + ' /> 사용</label>' +
+        '</div>' +
+        '<div class="pool-key"><input id="poolOllamaUrl" autocomplete="off" spellcheck="false" placeholder="http://localhost:11434" value="' + esc(ollama.url || '') + '" />' +
+        '<input id="poolOllamaModel" class="pool-model" autocomplete="off" spellcheck="false" placeholder="llama3.2" value="' + esc(ollama.model || '') + '" /></div>' +
+      '</div>' +
+      '<div class="pool-row is-local" data-provider="local">' +
+        '<div class="pool-main">' +
+        '<span class="pool-dot ' + localStatus.tone + '" aria-hidden="true"></span>' +
+        '<div class="pool-id"><b>로컬 결정론적 엔진</b><span>최후 폴백 · 10턴·리포트·프로젝트를 항상 완성</span></div>' +
+        '<span class="pool-status ' + localStatus.tone + '">' + esc(localStatus.label) + '</span>' +
+        '</div>' +
+      '</div>';
+    list.innerHTML = html + extra;
+    const summary = $('#poolSummary');
+    if (summary) summary.textContent = poolSummaryText();
+  }
+
+  function savePoolForm() {
+    $$('[data-pool-key]').forEach((input) => {
+      const id = input.getAttribute('data-pool-key');
+      const value = String(input.value || '').trim();
+      if (value) poolState.keys[id] = value;
+      else delete poolState.keys[id];
+    });
+    if ($('#poolOllamaOn')) poolState.ollama.enabled = $('#poolOllamaOn').checked;
+    if ($('#poolOllamaUrl')) poolState.ollama.url = String($('#poolOllamaUrl').value || '').trim() || 'http://localhost:11434';
+    if ($('#poolOllamaModel')) poolState.ollama.model = String($('#poolOllamaModel').value || '').trim() || 'llama3.2';
+    savePool();
+    renderPool();
+    renderAiStatus();
+    showToast('풀 키를 이 브라우저에만 저장했습니다');
+  }
+
+  function probePool() {
+    if (!aiAvailable() || poolBusy) return Promise.resolve();
+    poolBusy = true;
+    const note = $('#poolNote');
+    if (note) note.textContent = '전체 연결 테스트 중…';
+    const targets = poolRows.filter((row) => row.id !== 'local');
+    const results = [];
+    const run = targets.reduce((chain, def) => chain.then(() => {
+      const key = String((poolState.keys || {})[def.id] || '').trim();
+      return fetch(AI_POOL_ENDPOINT, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ provider: def.id, key: key || undefined })
+      })
+        .then((res) => res.json().catch(() => null))
+        .then((data) => {
+          poolState.probe[def.id] = { ok: !!(data && data.ok), at: Date.now(), message: (data && data.message) || '' };
+          results.push(providerLabelText(def.id) + ' ' + (data && data.ok ? 'OK' : '실패'));
+        })
+        .catch(() => { poolState.probe[def.id] = { ok: false, at: Date.now(), message: '연결 실패' }; results.push(providerLabelText(def.id) + ' 실패'); });
+    }), Promise.resolve());
+
+    return run.then(() => {
+      if (!poolState.ollama.enabled) return null;
+      const url = String(poolState.ollama.url || 'http://localhost:11434').replace(/\/+$/, '');
+      return fetch(url + '/api/tags')
+        .then((res) => res.json())
+        .then((data) => {
+          const models = (data && data.models) || [];
+          poolState.probe.ollama = { ok: true, at: Date.now(), models: models.map((m) => m.name).slice(0, 4) };
+          results.push('Ollama OK' + (models.length ? ' (' + models.map((m) => m.name).slice(0, 2).join(', ') + ')' : ''));
+        })
+        .catch(() => { poolState.probe.ollama = { ok: false, at: Date.now() }; results.push('Ollama 연결 안 됨'); });
+    }).then(() => {
+      poolBusy = false;
+      renderPool();
+      const okCount = Object.keys(poolState.probe).filter((id) => poolState.probe[id].ok).length;
+      if (note) note.textContent = '연결 확인: ' + okCount + '개 응답 · ' + results.join(' · ');
+    });
   }
 
   function plainText(html) {
@@ -1701,6 +1964,9 @@
       history: aiHistoryPayload(),
       directives: state.feedback.map((f) => f.text).slice(-4),
       directive: fresh || '',
+      keys: poolKeys(),
+      skip: poolSkip(),
+      prefer: aiConfig.provider,
       byok: aiConfig.provider !== 'auto' && aiConfig.key ? { provider: aiConfig.provider, key: aiConfig.key, model: aiConfig.model } : undefined
     };
   }
@@ -1790,52 +2056,122 @@
     const payload = aiTurnPayload(turn, stage, p, fresh);
     return aiRequest(payload).then((data) => {
       const ms = Date.now() - started;
-      if (!data || data.ok !== true) return local((data && (data.message || data.code)) || 'error');
-      const norm = data.mode === 'report' ? data.report : data.turn;
-      if (!norm) return local('empty');
-      const enriched = Object.assign({}, turn, {
-        html: aiTurnHtml(norm) || turn.html,
-        artifacts: aiArtifacts(norm, turn)
-      });
-      if (data.mode === 'report') {
-        const localReport = turn.report || buildReportData(p);
-        const merged = mergeAiReport(localReport, norm, {
-          provider: data.provider || 'workers-ai',
-          model: data.model || '',
-          ms: data.ms || ms,
-          at: Date.now()
+      if (data && Array.isArray(data.exhausted) && data.exhausted.length) markExhausted(data.exhausted);
+      if (data && data.ok === true) {
+        bumpUsage(data.provider);
+        const norm = data.mode === 'report' ? data.report : data.turn;
+        if (!norm) return local('empty');
+        const enriched = Object.assign({}, turn, {
+          html: aiTurnHtml(norm) || turn.html,
+          artifacts: aiArtifacts(norm, turn)
         });
-        if (merged) enriched.report = merged;
+        if (data.mode === 'report') {
+          const localReport = turn.report || buildReportData(p);
+          const merged = mergeAiReport(localReport, norm, {
+            provider: data.provider || 'workers-ai',
+            model: data.model || '',
+            ms: data.ms || ms,
+            at: Date.now()
+          });
+          if (merged) enriched.report = merged;
+        }
+        return {
+          turn: enriched,
+          meta: { source: 'ai', provider: data.provider || 'workers-ai', model: data.model || '', ms: data.ms || ms, at: Date.now(), reason: '' }
+        };
       }
-      return {
-        turn: enriched,
-        meta: { source: 'ai', provider: data.provider || 'workers-ai', model: data.model || '', ms: data.ms || ms, at: Date.now(), reason: '' }
-      };
+      const reason = (data && (data.message || data.code)) || 'error';
+      /* 서버 풀·BYOK 가 모두 실패하면, 사용자가 켜 둔 로컬 Ollama 를 브라우저에서 직접 시도한다. */
+      return ollamaTurn(payload, turn).then((ollama) => {
+        if (ollama) {
+          bumpUsage('ollama');
+          const enriched = Object.assign({}, turn, { html: aiTurnHtml(ollama.data) || turn.html });
+          return {
+            turn: enriched,
+            meta: { source: 'ai', provider: 'ollama', model: poolState.ollama.model || '', ms: Date.now() - started, at: Date.now(), reason: '' }
+          };
+        }
+        return local(reason);
+      });
     }).catch((err) => local(String((err && err.message) || err)));
   }
 
-  /** 서버 기능 확인 — 키 없이 Workers AI가 붙어 있는지. */
+  /* 로컬 Ollama — 브라우저가 http://localhost:11434 로 직접 호출. 꺼져 있거나 실패하면 null. */
+  function ollamaTurn(payload, turn) {
+    const cfg = poolState.ollama;
+    if (!cfg || !cfg.enabled) return Promise.resolve(null);
+    const base = String(cfg.url || 'http://localhost:11434').replace(/\/+$/, '');
+    const mission = payload.mission || {};
+    const agent = payload.agent || {};
+    const history = (payload.history || []).slice(-3).map((m) => '[' + m.agent + '] ' + m.text).join('\n');
+    const prompt = [
+      '한국어 협업 시뮬레이터의 ' + (agent.name || '에이전트') + '(' + (agent.role || '') + ')입니다.',
+      '과제: ' + mission.title,
+      '목표: ' + (mission.goal || ''),
+      '배경·제약: ' + (mission.context || ''),
+      '이번 턴(' + (payload.stage || 1) + '단계 ' + (payload.stageName || '') + ')에 할 일을 2~3문단으로 씁니다.',
+      history ? '이전 발언:\n' + history : '',
+      payload.directive ? '사용자 지시: ' + payload.directive : '',
+      'JSON 하나만: {"say":["문단","문단"],"points":[{"t":"항목","d":"설명"}],"callout":{"label":"판단","text":"한 문장"}}'
+    ].filter(Boolean).join('\n');
+    return fetch(base + '/api/chat', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ model: cfg.model || 'llama3.2', stream: false, format: 'json', messages: [{ role: 'user', content: prompt }] })
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        const text = data && data.message && data.message.content;
+        if (!text) return null;
+        let parsed = null;
+        try { parsed = JSON.parse(text); } catch (e) { parsed = null; }
+        if (!parsed || typeof parsed !== 'object') return null;
+        const say = (parsed.say || []).filter((s) => typeof s === 'string' && s.trim()).map((s) => s.slice(0, 500)).slice(0, 4);
+        const points = (parsed.points || []).filter((pt) => pt && (pt.d || pt.t)).map((pt) => ({ t: String(pt.t || '').slice(0, 60), d: String(pt.d || '').slice(0, 240) })).slice(0, 4);
+        const callout = parsed.callout && parsed.callout.text ? { label: String(parsed.callout.label || '판단').slice(0, 20), text: String(parsed.callout.text).slice(0, 260) } : null;
+        const joined = say.join(' ') + points.map((pt) => pt.t + pt.d).join(' ');
+        if ((!say.length && !points.length) || !/[가-힣]/.test(joined)) return null;
+        return { data: { say, points, callout } };
+      })
+      .catch(() => null);
+  }
+
+  /** 서버 기능 확인 — 키 없이 Workers AI가 붙어 있는지 + 무료 AI 풀 목록. */
   function probeAi() {
     if (!aiAvailable()) {
       state.ai.ready = false;
       state.ai.reason = '브라우저에서 API를 호출할 수 없습니다.';
       renderAiStatus();
+      renderPool();
       return Promise.resolve(false);
     }
+    const poolProbe = fetch(AI_POOL_ENDPOINT, { method: 'GET', headers: { accept: 'application/json' } })
+      .then((res) => res.json().catch(() => null))
+      .then((data) => {
+        if (data && data.ok && Array.isArray(data.pool) && data.pool.length) {
+          poolRows = data.pool;
+          renderPool();
+        }
+        return data;
+      })
+      .catch(() => null);
     try {
       return fetch(AI_ENDPOINT, { method: 'GET', headers: { accept: 'application/json' } })
         .then((res) => res.json().catch(() => null))
         .then((data) => {
           state.ai.ready = !!(data && data.ok && data.workersAi);
           state.ai.models = (data && data.models) || [];
+          if (data && Array.isArray(data.pool)) { poolRows = data.pool; renderPool(); }
           if (!state.ai.ready) state.ai.reason = 'Workers AI를 쓸 수 없어 로컬 엔진으로 동작합니다.';
           renderAiStatus();
+          probePoolLight();
           return state.ai.ready;
         })
         .catch(() => {
           state.ai.ready = false;
           state.ai.reason = 'API에 연결하지 못해 로컬 엔진으로 동작합니다.';
           renderAiStatus();
+          poolProbe.then(() => renderPool());
           return false;
         });
     } catch (e) {
@@ -1846,6 +2182,17 @@
     }
   }
 
+  /* 설정 창을 열었을 때 풀 상태를 가볍게 채운다(실제 호출 없이 서버 정보만). */
+  function probePoolLight() {
+    if (!aiAvailable()) return;
+    fetch(AI_POOL_ENDPOINT, { method: 'GET', headers: { accept: 'application/json' } })
+      .then((res) => res.json().catch(() => null))
+      .then((data) => {
+        if (data && data.ok && Array.isArray(data.pool)) { poolRows = data.pool; renderPool(); }
+      })
+      .catch(() => {});
+  }
+
   function renderAiStatus() {
     const btn = $('#btnAi');
     if (!btn) return;
@@ -1854,7 +2201,7 @@
     const dot = $('#aiDot');
     let text = 'AI 실시간';
     let tone = 'is-ai';
-    let title = '협업 턴을 실제 AI(Workers AI, 무료)가 생성합니다. 키 입력이 필요 없습니다.';
+    let title = '협업 턴을 무료 AI 풀(' + poolRows.length + '개 AI · Workers AI 1순위)이 생성합니다. 한 AI의 당일 할당량이 소진되면 다음 AI가 이어받습니다.';
     if (ai.attempted && ai.source === 'local') {
       text = '로컬 폴백';
       tone = 'is-local';
@@ -1888,8 +2235,9 @@
     if (!aiAvailable()) return '이 환경에서는 API를 호출할 수 없습니다 — 브라우저 내 엔진으로 동작합니다.';
     if (aiConfig.provider !== 'auto') return aiProviderDef().label + ' 키로 호출합니다. 키는 이 브라우저(localStorage)에만 저장됩니다.';
     if (state.ai.ready === null) return 'AI 연결 확인 중…';
-    if (state.ai.ready) return 'Workers AI 연결됨 — 키 없이 바로 동작합니다.' + (state.ai.models && state.ai.models[0] ? ' (' + state.ai.models[0] + ')' : '');
-    return state.ai.reason || 'Workers AI를 쓸 수 없어 로컬 엔진으로 동작합니다.';
+    const summary = poolSummaryText();
+    if (state.ai.ready) return '무료 AI 풀 연결됨 — 키 없이 1순위 Workers AI부터 시작하고, 한도가 차면 다음 AI로 넘어갑니다. (' + summary + ')';
+    return (state.ai.reason || 'Workers AI를 쓸 수 없어 로컬 엔진으로 동작합니다.') + ' (' + summary + ')';
   }
 
   function syncAiForm() {
@@ -1917,6 +2265,7 @@
     if ($('#aiProvider')) $('#aiProvider').value = aiConfig.provider;
     if ($('#aiKey')) $('#aiKey').value = aiConfig.key;
     if ($('#aiModel')) $('#aiModel').value = aiConfig.model;
+    renderPool();
     syncAiForm();
     $('#aiOverlay').hidden = false;
     probeAi();
@@ -2152,7 +2501,7 @@
       '<div class="msg-body">' +
       '<div class="msg-meta"><span class="msg-name">' + esc(a.name) + '</span>' +
       (m.tag ? '<span class="msg-tag">' + esc(m.tag) + '</span>' : '') +
-      (m.ai ? '<span class="msg-ai ' + (m.ai.source === 'ai' ? 'is-ai' : 'is-local') + '" title="' + esc(m.ai.source === 'ai' ? ((m.ai.model || m.ai.provider || 'AI') + ' · ' + (m.ai.ms ? (Math.round(m.ai.ms / 100) / 10) + '초' : '실시간 생성')) : ('AI 호출 대신 브라우저 내 엔진으로 생성' + (m.ai.reason ? ' · ' + m.ai.reason : ''))) + '">' + (m.ai.source === 'ai' ? 'AI' : '로컬') + '</span>' : '') +
+      (m.ai ? '<span class="msg-ai ' + (m.ai.source === 'ai' ? 'is-ai' : 'is-local') + '" title="' + esc(m.ai.source === 'ai' ? (providerLabelText(m.ai.provider) + (m.ai.model ? ' · ' + m.ai.model : '') + ' · ' + (m.ai.ms ? (Math.round(m.ai.ms / 100) / 10) + '초' : '실시간 생성')) : ('AI 호출 대신 브라우저 내 엔진으로 생성' + (m.ai.reason ? ' · ' + m.ai.reason : ''))) + '">' + (m.ai.source === 'ai' ? esc(providerBadge(m.ai.provider)) : '로컬') + '</span>' : '') +
       '<span class="msg-stage">STEP ' + String(m.stage).padStart(2, '0') + '</span>' +
       '<span class="msg-time">' + esc(m.time) + '</span></div>' +
       '<div class="bubble">' + m.html + art + (taskOps ? '<div class="taskop">태스크 보드 갱신 ' + taskOps + '</div>' : '') + '</div>' +
@@ -2797,6 +3146,32 @@
     $('#tabTasks').hidden = tab !== 'tasks';
     $('#tabArtifacts').hidden = tab !== 'artifacts';
     $('#tabMetrics').hidden = tab !== 'metrics';
+    if ($('#tabBuild')) $('#tabBuild').hidden = tab !== 'build';
+    if (tab === 'build') renderBuildTab();
+  }
+
+  /* 🛠️ 빌드 · 배포 — 과제·리포트를 build.js 모듈에 넘긴다. */
+  function buildContext() {
+    return {
+      mission: state.profile ? aiMissionPayload(state.profile) : null,
+      report: state.report || null
+    };
+  }
+
+  function renderBuildTab() {
+    const note = $('#buildTabNote');
+    if (!note) return;
+    if (!state.profile) {
+      note.innerHTML = '협업 과제를 먼저 시작하세요 — 과제 목표·단계·체크리스트가 프로젝트 재료가 됩니다.';
+      return;
+    }
+    note.innerHTML = '<b>' + esc(state.profile.title) + '</b>' + (state.report ? ' · 최종 리포트 반영됨' : ' · 리포트 전이지만 과제 단계로도 만들 수 있습니다');
+  }
+
+  function openBuild() {
+    if (!window.ACSBuild) { showToast('빌드 모듈을 불러오지 못했습니다'); return; }
+    window.ACSBuild.open(buildContext);
+    renderBuildTab();
   }
   function switchMobileTab(tab) {
     state.mobileTab = tab;
@@ -2945,6 +3320,11 @@
     $('#btnCopyMd').addEventListener('click', copyMarkdown);
     $('#btnDownloadMd').addEventListener('click', downloadMd);
     $('#btnDownloadHtml').addEventListener('click', downloadHtml);
+    if ($('#btnBuildOpen')) $('#btnBuildOpen').addEventListener('click', openBuild);
+    if ($('#btnBuildReport')) $('#btnBuildReport').addEventListener('click', () => { closeReport(); openBuild(); });
+    if ($('#poolSave')) $('#poolSave').addEventListener('click', savePoolForm);
+    if ($('#poolTest')) $('#poolTest').addEventListener('click', () => { savePoolForm(); probePool(); });
+    if ($('#poolReset')) $('#poolReset').addEventListener('click', () => { resetQuota(); showToast('오늘 소진 표시를 초기화했습니다'); });
 
     $('#btnCloseHistory').addEventListener('click', closeHistory);
     $('#historyOverlay').addEventListener('click', (e) => { if (e.target === $('#historyOverlay')) closeHistory(); });
@@ -2980,6 +3360,7 @@
       else if (!$('#historyOverlay').hidden) closeHistory();
       else if (!$('#guideOverlay').hidden) closeGuide();
       else if ($('#aiOverlay') && !$('#aiOverlay').hidden) closeAiDialog();
+      else if (window.ACSBuild && window.ACSBuild.isOpen()) window.ACSBuild.close();
       else if (!$('#modal').hidden) closeNewModal();
     });
 
@@ -2992,6 +3373,7 @@
     if (booted) return;
     booted = true;
     loadAiConfig();
+    loadPool();
     bind();
     switchRightTab('tasks');
     switchMobileTab(state.mobileTab);
@@ -3003,6 +3385,7 @@
       renderAll();
     }
     renderAiStatus();
+    renderPool();
     probeAi();
   }
 
@@ -3076,7 +3459,27 @@
       pending: () => !!state.pendingTurn,
       messages: () => state.messages.map((m) => ({ agent: m.agent, stage: m.stage, ai: m.ai || null, text: plainText(m.html).slice(0, 120) })),
       missionPayload: () => (state.profile ? aiMissionPayload(state.profile) : null),
-      reportAi: () => (state.report ? state.report.ai || null : null)
+      reportAi: () => (state.report ? state.report.ai || null : null),
+      /* 무료 AI 풀 */
+      poolPayload: () => ({ keys: poolKeys(), skip: poolSkip(), prefer: aiConfig.provider }),
+      pool: () => ({
+        rows: poolRows.map((row) => Object.assign({}, row, { status: poolStatus(row) })),
+        keys: Object.keys(poolKeys()),
+        usage: Object.assign({}, poolState.usage),
+        exhausted: poolSkip(),
+        ollama: Object.assign({}, poolState.ollama),
+        labels: Object.assign({}, PROVIDER_LABELS)
+      }),
+      markExhausted: (list) => { markExhausted(list); return poolSkip(); },
+      resetQuota: () => { resetQuota(); return poolSkip(); },
+      probePool: () => probePool(),
+      label: (provider) => providerLabelText(provider),
+      badge: (provider) => providerBadge(provider)
+    },
+    build: {
+      open: openBuild,
+      close: () => { if (window.ACSBuild) window.ACSBuild.close(); },
+      context: buildContext
     }
   };
 

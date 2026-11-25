@@ -1,4 +1,4 @@
-/* /api/collab — 🤖 에이전트 협업 탭의 실제 AI 응답
+/* /api/collab — 🤖 에이전트 협업 탭의 실제 AI 응답 (무료 AI 풀 · 자동 로테이션)
  *
  *  POST {
  *    mode: "turn" | "report",
@@ -8,15 +8,19 @@
  *    team: [{name, role, badge}],
  *    history: [{agent, stage, text}],
  *    directives: ["..."], directive: "이번 턴에 반영할 사용자 지시",
- *    byok: {provider: "openai"|"gemini"|"openrouter", key, model}   // 선택
+ *    keys:  {groq, gemini, openrouter, cerebras, mistral, openai},   // 무료 AI 풀 키(BYOK, 선택)
+ *    skip:  ["groq:llama-3.3-70b-versatile", "workers-ai"],          // 오늘 소진된 AI
+ *    prefer: "auto" | "groq" | "workers-ai" ...,                     // 선택
+ *    byok: {provider: "openai"|"gemini"|"openrouter", key, model}     // 예전 단일 엔진 형식
  *  }
- *  → {ok:true, mode, provider:"workers-ai"|"byok-openai"|..., model, ms, turn|report, warnings}
+ *  → {ok, mode, provider, providerLabel, model, ms, turn|report, tried[], exhausted[], warnings[]}
  *
- *  - 기본은 Workers AI(env.AI) 무료 텍스트 모델. 키 입력 없이 바로 동작한다.
- *  - 사용자가 자기 키(BYOK)를 넣으면 그 키로만 호출하고, 키는 저장하지 않는다.
- *  - 모델이 없거나·할당량이 없거나·형식이 깨지면 ok:false 를 돌려주고,
- *    브라우저는 기존 결정론적 로컬 엔진으로 폴백한다(앱이 멈추지 않는다).
- *  - GET 은 기능 확인용(모델 목록·Workers AI 유무).
+ *  - 기본은 무료 AI 풀: Workers AI → Groq → Gemini → OpenRouter → Cerebras → Mistral → OpenAI.
+ *  - 한 프로바이더/모델이 429·4006·quota 를 돌려주면 exhausted 에 담아 알려 주고, 그 턴은
+ *    다음 AI 가 이어서 만든다. 브라우저는 exhausted 를 오늘 하루 건너뛴다(localStorage).
+ *  - 모두 실패하면 ok:false 를 돌려주고 브라우저는 결정론적 로컬 엔진으로 폴백한다.
+ *  - 키는 요청에만 쓰고 저장하지 않는다.
+ *  - GET 은 기능 확인용(모델 목록·Workers AI 유무·풀 현황).
  */
 import {
   BYOK_PROVIDERS,
@@ -28,10 +32,19 @@ import {
   parseJsonObject,
   validateRequest,
 } from "./_collab.js";
+import {
+  buildAttempts,
+  collectKeys,
+  describeTried,
+  normalizeSkip,
+  providerLabel,
+  publicPool,
+  runPool,
+} from "./_aiPool.js";
 
 const TURN_TIMEOUT = 15000;
 const REPORT_TIMEOUT = 18000;
-const TOTAL_BUDGET = 26000;
+const TOTAL_BUDGET = 34000;
 const MAX_BODY = 80 * 1024;
 
 function json(data, status = 200) {
@@ -50,18 +63,6 @@ function withTimeout(promise, ms, label) {
     timer = setTimeout(() => reject(new Error((label || "timeout") + " after " + ms + "ms")), ms);
   });
   return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
-}
-
-function modelOutputText(output) {
-  if (!output) return "";
-  if (typeof output === "string") return output;
-  if (typeof output.response === "string") return output.response;
-  if (output.result && typeof output.result.response === "string") return output.result.response;
-  if (Array.isArray(output.choices) && output.choices[0]) {
-    const choice = output.choices[0];
-    return (choice.message && choice.message.content) || choice.text || "";
-  }
-  return "";
 }
 
 function providerText(data) {
@@ -96,66 +97,7 @@ function finish(value, fallbackTitle, mode) {
   return mode === "report" ? normalizeReportPayload(value) : normalizeTurnPayload(value, fallbackTitle);
 }
 
-async function callWorkersAi(env, request, messages, fallbackTitle, deadline) {
-  if (!env || !env.AI || typeof env.AI.run !== "function") {
-    return { ok: false, provider: "workers-ai", code: "ai_unavailable", data: null, warnings: ["Workers AI 바인딩이 없습니다."], tried: [] };
-  }
-  const warnings = [];
-  const tried = [];
-  const models = request.model && COLLAB_MODELS.includes(request.model)
-    ? [request.model, ...COLLAB_MODELS.filter((m) => m !== request.model)]
-    : COLLAB_MODELS.slice();
-  const maxTokens = request.mode === "report" ? 1600 : 950;
-  const timeout = request.mode === "report" ? REPORT_TIMEOUT : TURN_TIMEOUT;
-
-  for (const model of models.slice(0, 2)) {
-    const remaining = deadline - Date.now();
-    if (remaining < 3500) {
-      warnings.push("남은 시간이 부족해 다음 모델은 시도하지 않았습니다.");
-      break;
-    }
-    try {
-      const output = await withTimeout(
-        env.AI.run(model, {
-          messages,
-          max_tokens: maxTokens,
-          temperature: 0.55,
-        }),
-        Math.min(timeout, remaining),
-        model
-      );
-      const text = modelOutputText(output);
-      if (!text || !text.trim()) {
-        tried.push(model + ": 빈 응답");
-        continue;
-      }
-      let data = finish(parseJsonObject(text), fallbackTitle, request.mode);
-      if (!data) {
-        /* 형식만 깨진 경우 같은 모델에 한 번 더 요청한다. */
-        const left = deadline - Date.now();
-        if (left > 4000) {
-          const retry = await withTimeout(
-            env.AI.run(model, {
-              messages: repairMessages(messages, text),
-              max_tokens: maxTokens,
-              temperature: 0.2,
-            }),
-            Math.min(timeout, left),
-            model + " repair"
-          ).catch(() => null);
-          const retryText = modelOutputText(retry);
-          if (retryText) data = finish(parseJsonObject(retryText), fallbackTitle, request.mode);
-        }
-      }
-      if (data) return { ok: true, provider: "workers-ai", model, data, warnings, tried };
-      tried.push(model + ": JSON 형식 불일치");
-    } catch (error) {
-      tried.push(model + ": " + String((error && error.message) || error).slice(0, 100));
-    }
-  }
-  return { ok: false, provider: "workers-ai", code: "bad_output", data: null, warnings, tried };
-}
-
+/** 예전 단일 BYOK 형식 — 사용자가 고른 엔진 하나로만 호출한다(자동 전환 없음). */
 async function callByok(request, messages, fallbackTitle) {
   const byok = request.byok;
   const def = BYOK_PROVIDERS[byok.provider];
@@ -218,9 +160,12 @@ export async function onRequest(context) {
       ok: true,
       service: "agent-collab-studio",
       endpoint: "collab",
+      version: "2.0.0",
       workersAi: Boolean(env && env.AI && typeof env.AI.run === "function"),
       models: COLLAB_MODELS,
       byok: Object.keys(BYOK_PROVIDERS),
+      pool: publicPool(env),
+      rotation: true,
       modes: ["turn", "report"],
       stages: 10,
     });
@@ -255,23 +200,62 @@ export async function onRequest(context) {
     { role: "system", content: prompts.system },
     { role: "user", content: prompts.user },
   ];
-  const fallbackTitle = (req.mode === "report" ? "최종 결과물 리포트" : "");
+  const fallbackTitle = req.mode === "report" ? "최종 결과물 리포트" : "";
 
   let result;
   if (req.byok) {
     result = await callByok(req, messages, fallbackTitle);
   } else {
-    result = await callWorkersAi(env, req, messages, fallbackTitle, started + TOTAL_BUDGET);
+    const keys = collectKeys(body, env);
+    const skip = normalizeSkip(body.skip);
+    const prefer = String(body.prefer || "auto").slice(0, 30);
+    const model = String(req.model || "").slice(0, 80);
+    const models = model && prefer !== "auto" ? { [prefer]: model } : {};
+    const attempts = buildAttempts({ keys, skip, prefer, models, env, includeWorkersAi: true });
+    if (!attempts.length) {
+      return json({
+        ok: false,
+        mode: req.mode,
+        stage: req.stage,
+        code: "ai_unavailable",
+        message: "사용할 수 있는 무료 AI가 없습니다(Workers AI 미연결·키 없음). 이 턴은 로컬 엔진으로 만듭니다.",
+        provider: "workers-ai",
+        ms: Date.now() - started,
+        tried: [],
+        exhausted: [],
+        warnings: [],
+      }, 200);
+    }
+    const pool = await runPool({
+      attempts,
+      messages,
+      deadline: started + TOTAL_BUDGET,
+      perAttemptMs: req.mode === "report" ? REPORT_TIMEOUT : TURN_TIMEOUT,
+      maxTokens: req.mode === "report" ? 1600 : 950,
+      temperature: 0.55,
+      fetchImpl: typeof fetch === "function" ? fetch : null,
+      env,
+      transform: (text) => {
+        const data = finish(parseJsonObject(text), fallbackTitle, req.mode);
+        return data ? { ok: true, data } : { ok: false, reason: "JSON 형식 불일치" };
+      },
+      repair: repairMessages,
+    });
+    result = pool;
   }
+
   const ms = Date.now() - started;
 
   if (!result.ok || !result.data) {
     const tried = result.tried || [];
-    const joined = tried.join(" ");
+    const joined = typeof tried[0] === "string" ? tried.join(" ") : describeTried(tried);
     let message = result.message || "AI 응답을 만들지 못했습니다.";
-    if (/4006|free allocation|neurons/i.test(joined)) {
+    const exhausted = result.exhausted || [];
+    if (exhausted.length && joined) {
+      message = "무료 AI 할당량이 소진되었습니다 — " + joined + ". 00:00 UTC(한국 09:00)에 리셋되며, 이 턴은 로컬 엔진으로 만듭니다.";
+    } else if (/4006|free allocation|neurons|quota/i.test(joined)) {
       message = "Workers AI 무료 일일 할당량(10,000 neurons)이 소진되었습니다. 00:00 UTC(한국 09:00) 이후 다시 시도해 주세요.";
-    } else if (/deprecated|5028/i.test(joined)) {
+    } else if (/deprecated|5028|model_gone/i.test(joined)) {
       message = "이 모델은 제공이 종료되었습니다. 다음 모델로 다시 시도해 주세요.";
     } else if (/JSON|형식 불일치/i.test(joined) && !result.message) {
       message = "AI가 정한 형식으로 답하지 않아 이 턴은 로컬 엔진으로 만들었습니다.";
@@ -284,9 +268,10 @@ export async function onRequest(context) {
       stage: req.stage,
       code: result.code || "ai_unavailable",
       message,
-      provider: result.provider || "none",
+      provider: result.provider || (req.byok ? "byok-" + req.byok.provider : "workers-ai"),
       ms,
       tried,
+      exhausted: exhausted,
       warnings: result.warnings || [],
     }, 200);
   }
@@ -297,10 +282,12 @@ export async function onRequest(context) {
     stage: req.stage,
     stageName: req.stageName,
     provider: result.provider,
+    providerLabel: providerLabel(result.provider),
     model: result.model,
     ms,
     warnings: result.warnings || [],
     tried: result.tried || [],
+    exhausted: result.exhausted || [],
     byok: Boolean(req.byok),
   };
   payload[req.mode === "report" ? "report" : "turn"] = result.data;

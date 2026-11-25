@@ -16,6 +16,7 @@ export const COLLAB_MODELS = [
   "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
   "@cf/qwen/qwen3.8-27b",
   "@cf/google/gemma-4-26b-a4b-it",
+  "@cf/meta/llama-3.1-8b-instruct-fast",
 ];
 
 export const BYOK_PROVIDERS = {

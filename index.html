@@ -193,6 +193,7 @@
         <button type="button" role="tab" class="rtab is-active" data-rtab="tasks">태스크</button>
         <button type="button" role="tab" class="rtab" data-rtab="artifacts">산출물 <span id="artifactCount">0</span></button>
         <button type="button" role="tab" class="rtab" data-rtab="metrics">지표</button>
+        <button type="button" role="tab" class="rtab rtab-build" data-rtab="build">🛠️ 빌드</button>
       </div>
 
       <div class="rpanel" id="tabTasks">
@@ -216,6 +217,21 @@
 
       <div class="rpanel" id="tabArtifacts" hidden>
         <div id="artifactList" class="artifact-list"></div>
+      </div>
+
+      <div class="rpanel" id="tabBuild" hidden>
+        <div class="build-card">
+          <span class="eyebrow">BUILD · SHIP</span>
+          <h3>실제 파일 생성 &amp; 배포</h3>
+          <p id="buildTabNote">협업 과제와 최종 리포트로 <b>실제 동작하는 웹 프로젝트</b>를 만들고, GitHub Pages·Cloudflare Pages에 배포합니다.</p>
+          <button type="button" class="btn btn-primary btn-block" id="btnBuildOpen">🛠️ 빌드 · 배포 열기</button>
+          <ul class="build-mini-list">
+            <li>파일 세트 생성 · 코드 편집 · 실시간 미리보기</li>
+            <li>ZIP 다운로드</li>
+            <li>GitHub 업로드 + Pages 라이브 URL</li>
+            <li>Cloudflare Pages Direct Upload</li>
+          </ul>
+        </div>
       </div>
 
       <div class="rpanel" id="tabMetrics" hidden>
@@ -692,6 +708,10 @@
         <svg viewBox="0 0 24 24" class="ico"><path d="M12 4v11M7 11l5 5 5-5M5 20h14"/></svg>
         .html 보고서
       </button>
+      <button type="button" class="btn btn-sm btn-build" id="btnBuildReport">
+        <svg viewBox="0 0 24 24" class="ico"><path d="M4 7h16v13H4z"/><path d="M9 7V4h6v3"/><path d="M9 13h6"/></svg>
+        실제 프로젝트 생성 &amp; 배포
+      </button>
     </div>
     <div class="drawer-body report-body" id="reportBody"></div>
   </section>
@@ -752,26 +772,146 @@
     </div>
     <div class="modal-body">
       <p class="ai-status" id="aiStatus">AI 연결 확인 중…</p>
-      <label class="field" for="aiProvider"><span>AI 엔진</span>
-        <select id="aiProvider">
-          <option value="auto">자동 · Workers AI 무료 (권장)</option>
-          <option value="openai">OpenAI (본인 키)</option>
-          <option value="gemini">Google Gemini (본인 키)</option>
-          <option value="openrouter">OpenRouter (본인 키)</option>
-        </select>
-      </label>
-      <label class="field" for="aiKey"><span>API 키 <i>선택 — 자동 모드는 필요 없습니다</i></span>
-        <input id="aiKey" type="password" autocomplete="off" spellcheck="false" placeholder="자동 모드는 키가 필요 없습니다" />
-      </label>
-      <label class="field" for="aiModel"><span>모델 <i>선택</i></span>
-        <input id="aiModel" autocomplete="off" spellcheck="false" placeholder="자동 모드는 서버가 모델을 고릅니다" />
-      </label>
+
+      <!-- 무료 AI 풀 — 당일 할당량이 소진되면 다음 AI가 이어받는다 -->
+      <div class="pool-head">
+        <span class="pool-title">무료 AI 풀 <i>자동 로테이션</i></span>
+        <span class="pool-summary" id="poolSummary">확인 중…</span>
+      </div>
+      <div class="pool-list" id="poolList" aria-live="polite"></div>
+      <div class="ai-actions pool-actions">
+        <button type="button" class="btn btn-sm" id="poolSave">풀 키 저장</button>
+        <button type="button" class="btn btn-sm" id="poolTest">전체 연결 테스트</button>
+        <button type="button" class="btn btn-sm ghost" id="poolReset">오늘 소진 초기화</button>
+      </div>
+      <p class="ai-note" id="poolNote">풀은 <b>Workers AI → Groq → Gemini → OpenRouter → Cerebras → Mistral → OpenAI → 로컬 Ollama → 로컬 엔진</b> 순서로 시도합니다. 한 AI가 <b>오늘 한도 소진(429·4006)</b>을 돌려주면 오늘 하루 건너뛰고 다음 AI가 그 턴을 이어서 만듭니다. 키는 이 브라우저(localStorage)에만 저장됩니다.</p>
+
+      <details class="ai-fixed" open>
+        <summary>고정 엔진 (선택) — 한 AI로만 호출</summary>
+        <label class="field" for="aiProvider"><span>AI 엔진</span>
+          <select id="aiProvider">
+            <option value="auto">자동 · 무료 AI 풀 (권장)</option>
+            <option value="openai">OpenAI (본인 키)</option>
+            <option value="gemini">Google Gemini (본인 키)</option>
+            <option value="openrouter">OpenRouter (본인 키)</option>
+          </select>
+        </label>
+        <label class="field" for="aiKey"><span>API 키 <i>선택 — 자동 모드는 필요 없습니다</i></span>
+          <input id="aiKey" type="password" autocomplete="off" spellcheck="false" placeholder="자동 모드는 키가 필요 없습니다" />
+        </label>
+        <label class="field" for="aiModel"><span>모델 <i>선택</i></span>
+          <input id="aiModel" autocomplete="off" spellcheck="false" placeholder="자동 모드는 서버가 모델을 고릅니다" />
+        </label>
+      </details>
       <p class="ai-note" id="aiByokHint" hidden>입력한 키는 <b>이 브라우저(localStorage)에만</b> 저장되고, 협업 턴을 만들 때 이 사이트의 함수로만 전송됩니다. 서버에 저장하지 않습니다.</p>
-      <p class="ai-note">키 없이도 <b>Workers AI</b>가 기본으로 동작합니다. AI 호출이 실패하거나 할당량이 없으면 <b>브라우저 내 로컬 엔진</b>으로 자동 폴백하고, 발언마다 <b>AI</b>/<b>로컬</b> 배지로 표시합니다.</p>
+      <p class="ai-note">키 없이도 <b>Workers AI</b>가 1순위로 동작하고, 실패하면 풀의 다음 AI → 로컬 엔진 순서로 자동 폴백합니다. 발언마다 <b>실제 응답한 AI</b> 배지가 붙습니다.</p>
       <div class="ai-actions">
         <button type="button" class="btn btn-primary" id="aiSave">저장</button>
         <button type="button" class="btn" id="btnAiTest">연결 테스트</button>
         <button type="button" class="btn ghost" id="btnAiClear">키 삭제</button>
+      </div>
+    </div>
+  </section>
+</div>
+
+
+<!-- ══════════ BUILD · DEPLOY (🛠️ 실제 프로젝트 생성 & 배포) ══════════ -->
+<div class="overlay" id="buildOverlay" hidden>
+  <section class="modal build-modal" role="dialog" aria-modal="true" aria-labelledby="buildTitle">
+    <div class="build-head">
+      <div>
+        <span class="eyebrow">BUILD · SHIP</span>
+        <h2 id="buildTitle">🛠️ 실제 프로젝트 생성 &amp; 배포</h2>
+      </div>
+      <div class="build-head-actions">
+        <span class="build-pill" id="buildGenPill">대기</span>
+        <button type="button" class="iconbtn" id="btnBuildClose" aria-label="닫기">
+          <svg viewBox="0 0 24 24" class="ico"><path d="M6 6l12 12M18 6L6 18"/></svg>
+        </button>
+      </div>
+    </div>
+
+    <div class="build-top">
+      <div class="build-mission">
+        <b id="buildMissionTitle">과제가 없습니다</b>
+        <span id="buildMissionMeta">협업 과제를 먼저 시작하면 그 과제와 리포트로 프로젝트를 만듭니다.</span>
+      </div>
+      <button type="button" class="btn btn-primary" id="btnBuildGenerate">프로젝트 생성</button>
+    </div>
+    <p class="build-status" id="buildStatus">무료 AI 풀이 과제·리포트를 읽고 실제 동작하는 파일 세트를 만듭니다. AI가 없어도 로컬 생성기가 같은 일을 합니다.</p>
+
+    <div class="build-work" id="buildWork" hidden>
+      <nav class="build-tabs" role="tablist" aria-label="빌드 화면">
+        <button type="button" role="tab" class="btab is-active" data-btab="files">파일 <span id="buildFileCount">0</span></button>
+        <button type="button" role="tab" class="btab" data-btab="preview">미리보기</button>
+        <button type="button" role="tab" class="btab" data-btab="deploy">배포</button>
+      </nav>
+
+      <div class="build-pane is-active" id="bPaneFiles">
+        <div class="build-tree" id="buildTree" role="listbox" aria-label="프로젝트 파일"></div>
+        <div class="build-editor">
+          <div class="build-editor-head">
+            <span class="build-path" id="buildEditorPath">index.html</span>
+            <span class="build-dirty" id="buildDirty"></span>
+            <button type="button" class="mini" id="btnBuildSaveFile">적용</button>
+          </div>
+          <textarea id="buildEditorArea" spellcheck="false" autocapitalize="off" aria-label="코드 편집기"></textarea>
+        </div>
+      </div>
+
+      <div class="build-pane" id="bPanePreview">
+        <div class="build-preview-head">
+          <span>실시간 미리보기 <i>샌드박스 iframe · CSS/JS 인라인</i></span>
+          <span class="build-preview-meta" id="buildPreviewMeta"></span>
+          <button type="button" class="mini" id="btnBuildRefresh">새로고침</button>
+        </div>
+        <iframe id="buildPreviewFrame" class="build-frame" sandbox="allow-scripts allow-forms allow-modals allow-popups" title="프로젝트 미리보기"></iframe>
+      </div>
+
+      <div class="build-pane" id="bPaneDeploy">
+        <div class="deploy-grid">
+          <section class="deploy-card">
+            <h3>1) ZIP 다운로드</h3>
+            <p>생성된 파일을 압축 하나로 받아 어디서든 열 수 있습니다. 외부 라이브러리 없이 브라우저에서 직접 만듭니다.</p>
+            <button type="button" class="btn" id="btnBuildZip">ZIP 다운로드</button>
+            <p class="hint" id="buildZipNote"></p>
+          </section>
+
+          <section class="deploy-card">
+            <h3>2) GitHub 업로드 + Pages 배포</h3>
+            <label class="field" for="ghToken"><span>Personal Access Token <i>repo 권한</i></span>
+              <input id="ghToken" type="password" autocomplete="off" spellcheck="false" placeholder="ghp_… (이 브라우저에만 저장)" />
+            </label>
+            <label class="field" for="ghRepo"><span>저장소 이름</span>
+              <input id="ghRepo" autocomplete="off" spellcheck="false" placeholder="my-project" />
+            </label>
+            <label class="deploy-check"><input type="checkbox" id="ghPrivate" /> 비공개 저장소</label>
+            <div class="deploy-actions">
+              <button type="button" class="btn btn-sm ghost" id="btnGhSave">토큰 저장</button>
+              <button type="button" class="btn btn-sm btn-primary" id="btnGhDeploy">업로드 + Pages 배포</button>
+            </div>
+            <p class="hint" id="ghStatus">저장소를 만들고 모든 파일을 커밋한 뒤 GitHub Pages를 켜서 라이브 URL을 만듭니다.</p>
+            <div class="deploy-result" id="ghResult" hidden></div>
+          </section>
+
+          <section class="deploy-card">
+            <h3>3) Cloudflare Pages 직접 배포</h3>
+            <label class="field" for="cfAccountId"><span>Account ID</span>
+              <input id="cfAccountId" autocomplete="off" spellcheck="false" placeholder="32자리 계정 ID" />
+            </label>
+            <label class="field" for="cfToken"><span>API 토큰 <i>Pages 편집 권한</i></span>
+              <input id="cfToken" type="password" autocomplete="off" spellcheck="false" placeholder="토큰은 요청에만 쓰고 저장하지 않습니다" />
+            </label>
+            <label class="field" for="cfProject"><span>프로젝트 이름</span>
+              <input id="cfProject" autocomplete="off" spellcheck="false" placeholder="my-project" />
+            </label>
+            <div class="deploy-actions">
+              <button type="button" class="btn btn-sm btn-primary" id="btnCfDeploy">Cloudflare Pages 배포</button>
+            </div>
+            <p class="hint" id="cfStatus">서버 함수(/api/deploy-cf)가 Direct Upload로 올리고 https://프로젝트.pages.dev 를 돌려줍니다.</p>
+            <div class="deploy-result" id="cfResult" hidden></div>
+          </section>
+        </div>
       </div>
     </div>
   </section>
@@ -821,6 +961,7 @@
 
 <script src="mode.js"></script>
 <script src="agents-catalog.js"></script>
+<script src="build.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

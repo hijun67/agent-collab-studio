@@ -15,7 +15,7 @@ execFileSync(process.execPath, [join(root, 'scripts', 'scope-css.mjs')], { stdio
 rmSync(out, { recursive: true, force: true });
 mkdirSync(out, { recursive: true });
 
-const files = ['index.html', 'app.css', 'app.js', 'mode.js', 'agents-catalog.json', 'agents-catalog.js', 'README.md'];
+const files = ['index.html', 'app.css', 'app.js', 'build.js', 'mode.js', 'agents-catalog.json', 'agents-catalog.js', 'README.md'];
 for (const f of files) {
   if (!existsSync(join(root, f))) throw new Error('missing ' + f);
   cpSync(join(root, f), join(out, f));
@@ -39,6 +39,9 @@ const headers = [
   '  Cache-Control: public, max-age=300',
   '',
   '/app.js',
+  '  Cache-Control: public, max-age=300',
+  '',
+  '/build.js',
   '  Cache-Control: public, max-age=300',
   '',
   '/mode.js',
