@@ -972,3 +972,6 @@ body.mode-studio .topbar-controls { display: none !important; }
   .deploy-card .field input { font-size: 11px; }
   #bPaneDeploy.is-active { display: block; overflow-y: auto; }
 }
+
+/* hidden 속성이 display 규칙에 덮이지 않게 */
+.deploy-result[hidden] { display: none; }

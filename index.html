@@ -784,7 +784,7 @@
         <button type="button" class="btn btn-sm" id="poolTest">전체 연결 테스트</button>
         <button type="button" class="btn btn-sm ghost" id="poolReset">오늘 소진 초기화</button>
       </div>
-      <p class="ai-note" id="poolNote">풀은 <b>Workers AI → Groq → Gemini → OpenRouter → Cerebras → Mistral → OpenAI → 로컬 Ollama → 로컬 엔진</b> 순서로 시도합니다. 한 AI가 <b>오늘 한도 소진(429·4006)</b>을 돌려주면 오늘 하루 건너뛰고 다음 AI가 그 턴을 이어서 만듭니다. 키는 이 브라우저(localStorage)에만 저장됩니다.</p>
+      <p class="ai-note" id="poolNote">풀은 <b>Workers AI → Groq → Gemini → OpenRouter → Cerebras → Mistral → OpenAI → 로컬 Ollama → 로컬 엔진</b> 순서로 시도합니다. 한 AI가 <b>오늘 한도 소진(429·4006)</b>을 돌려주면 오늘 하루 건너뛰고 다음 AI가 그 턴을 이어서 만듭니다. <b>오늘 소진 초기화</b>는 이 브라우저의 표시만 지우며, 실제 무료 한도는 <b>00:00 UTC(한국 09:00)</b>에 다시 채워집니다. 키는 이 브라우저(localStorage)에만 저장됩니다.</p>
 
       <details class="ai-fixed" open>
         <summary>고정 엔진 (선택) — 한 AI로만 호출</summary>
