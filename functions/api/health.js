@@ -9,7 +9,7 @@ export async function onRequest(context) {
   const data = {
     ok: true,
     service: "agent-collab-studio",
-    version: "2.2.0",
+    version: "2.3.0",
     modes: ["agent", "studio"],
     time: new Date().toISOString(),
     features: {
@@ -24,8 +24,12 @@ export async function onRequest(context) {
       collabModes: ["turn", "report"],
       collabFallback: true,
       aiPool: true,
-      aiPoolOrder: ["workers-ai", "groq", "gemini", "openrouter", "cerebras", "mistral", "openai", "ollama", "local"],
+      aiPoolOrder: ["workers-ai", "groq", "gemini", "openrouter", "cerebras", "mistral", "ollama", "local"],
       aiPoolRotation: true,
+      aiPoolRoundRobin: true,
+      aiPoolPaidAuto: false,
+      aiPoolBudgetSplit: true,
+      artifactDownloads: ["md", "zip"],
       generateProject: true,
       generateProjectArchetypes: ["pomodoro", "calculator", "todo", "quiz", "notes", "directory", "dashboard"],
       smartFallback: true,

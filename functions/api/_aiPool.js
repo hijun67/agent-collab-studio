@@ -7,7 +7,10 @@
  *  - 키는 요청 본문으로만 받고 저장하지 않습니다. 서버 환경변수(GROQ_API_KEY 등)가 있으면
  *    사용자가 키를 넣지 않아도 그 프로바이더를 씁니다.
  *  - 할당량 소진 판정: HTTP 429, Workers AI 4006/5016(free allocation), quota / rate limit /
- *    insufficient_quota / exceeded 문구. 소진된 프로바이더는 결과에 담아 브라우저가 오늘 하루 건너뜁니다.
+ *    insufficient_quota / exceeded 문구. 소진된 프로바이더는 결과에 담아 브라우저가 오늘 하루 건너뛰고,
+ *    같은 턴 안에서도 그 프로바이더의 남은 모델은 다시 부르지 않는다.
+ *  - 유료(paid) 프로바이더는 자동 순환에서 제외한다 — 사용자가 직접 고르고 자기 키를 넣은 경우만.
+ *  - 시도 시간은 프로바이더별로 나눠 가진다(allocateTimeout) — 앞쪽 AI가 느려도 뒤쪽 무료 AI까지 간다.
  */
 
 /** 우선순위 순서대로 시도하는 무료/저비용 AI 풀. */
@@ -217,46 +220,87 @@ export function isSkipped(providerId, model, skip) {
 
 /**
  * 시도 순서를 만든다.
- *  - Workers AI 모델을 먼저(키 없이 무료), 그다음 사용자가 고정한 엔진(prefer), 그다음 풀 순서.
+ *  - 사용자가 고정한 엔진(prefer) → Workers AI(키 없이 무료) → 나머지 무료 프로바이더(풀 순서).
+ *  - 모델은 **라운드 로빈**으로 섞는다: 각 프로바이더의 1번 모델을 먼저 모두 시도하고,
+ *    그다음 2번 모델… 그래서 Workers AI 가 4006/quota 로 막혀도 Groq·Gemini·OpenRouter·
+ *    Cerebras·Mistral 의 첫 모델까지 예산 안에서 반드시 도달한다.
+ *  - `paid: true` 프로바이더(OpenAI)는 자동 순환에서 **완전히 제외**한다. 사용자가
+ *    prefer 로 그 프로바이더를 직접 고르고 자기 키를 넣은 경우에만 시도한다.
  *  - 키가 없는 프로바이더는 건너뛴다(Workers AI 는 바인딩이 있어야 한다).
  */
 export function buildAttempts({ keys, skip, prefer, models, env, includeWorkersAi }) {
-  const pool = new Map((keys || {}) ? Object.keys(keys).map((id) => [id, keys[id]]) : []);
-  const attempts = [];
+  const pool = new Map(keys && typeof keys === "object" ? Object.entries(keys) : []);
   const chosen = models && typeof models === "object" ? models : {};
-
-  const pushProvider = (provider, forcedModel) => {
-    if (!provider) return;
-    if (skipProvider(provider, skip, forcedModel)) return;
-    if (provider.kind === "workers-ai") {
-      if (includeWorkersAi === false || !(env && env.AI)) return;
-      const list = chosen[provider.id] ? [chosen[provider.id]] : provider.models;
-      for (const model of list) {
-        if (!isSkipped(provider.id, model, skip)) attempts.push({ provider: provider.id, model, key: "", source: "server" });
-      }
-      return;
-    }
-    const entry = pool.get(provider.id);
-    if (!entry || !entry.key) return;
-    const list = forcedModel || chosen[provider.id]
-      ? [forcedModel || chosen[provider.id]]
-      : provider.models;
-    for (const model of list) {
-      if (!isSkipped(provider.id, model, skip)) attempts.push({ provider: provider.id, model, key: entry.key, source: entry.source });
-    }
-  };
-
   const preferId = String(prefer || "").toLowerCase();
   const preferDef = preferId && preferId !== "auto" ? providerById(preferId) : null;
-  const workers = providerById("workers-ai");
-  if (!(preferDef && preferDef.id === "workers-ai")) pushProvider(workers);
-  if (preferDef) pushProvider(preferDef, chosen[preferDef.id]);
-  for (const provider of AI_POOL) {
-    if (preferDef && provider.id === preferDef.id) continue;
-    if (provider.id === "workers-ai") continue;
-    pushProvider(provider);
+
+  const modelList = (provider, forcedModel) => {
+    const only = forcedModel || chosen[provider.id];
+    return only ? [only] : provider.models;
+  };
+
+  /** 자격(바인딩·키)이 있고 유료 제한을 통과해야 목록에 넣는다. */
+  const eligible = (provider) => {
+    if (!provider) return null;
+    if (provider.kind === "workers-ai") {
+      if (includeWorkersAi === false || !(env && env.AI)) return null;
+      return { key: "", source: "server" };
+    }
+    const entry = pool.get(provider.id);
+    if (!entry || !entry.key) return null;
+    if (provider.paid) {
+      /* 유료 프로바이더는 사용자가 직접 고르고 자기 키(source: "user")를 넣었을 때만. */
+      const pickedByUser = preferDef && preferDef.id === provider.id && entry.source === "user";
+      if (!pickedByUser) return null;
+    }
+    return entry;
+  };
+
+  const ordered = [];
+  const seen = new Set();
+  const add = (provider, forcedModel) => {
+    if (!provider || seen.has(provider.id)) return;
+    const entry = eligible(provider);
+    if (!entry) return;
+    if (skipProvider(provider, skip, null)) return;
+    seen.add(provider.id);
+    const list = modelList(provider, forcedModel).filter((model) => !isSkipped(provider.id, model, skip));
+    if (!list.length) return;
+    ordered.push({ provider, entry, models: list });
+  };
+
+  if (preferDef) add(preferDef, chosen[preferDef.id]);
+  add(providerById("workers-ai"));
+  for (const provider of AI_POOL) add(provider);
+
+  const rounds = ordered.reduce((max, item) => Math.max(max, item.models.length), 0);
+  const attempts = [];
+  for (let round = 0; round < rounds; round += 1) {
+    for (const item of ordered) {
+      const model = item.models[round];
+      if (!model) continue;
+      attempts.push({ provider: item.provider.id, model, key: item.entry.key, source: item.entry.source });
+    }
   }
   return attempts;
+}
+
+/**
+ * 한 번의 시도에 쓸 시간(ms). 남은 무료 프로바이더가 있으면 그 몫을 남겨 두고,
+ * 뒤쪽 프로바이더(OpenRouter·Cerebras·Mistral)까지 반드시 도달하게 한다.
+ */
+export function allocateTimeout(opts) {
+  const remaining = Math.max(0, Number(opts && opts.remaining) || 0);
+  const perAttemptMs = Math.max(1000, Number(opts && opts.perAttemptMs) || 15000);
+  const providersLeft = Math.max(1, Number(opts && opts.providersLeft) || 1);
+  const minAttemptMs = Math.max(1000, Number(opts && opts.minAttemptMs) || 4000);
+  const reservePerProviderMs = Math.max(0, Number(opts && opts.reservePerProviderMs) || 2500);
+  if (remaining <= 0) return 0;
+  const cap = Math.min(perAttemptMs, remaining);
+  const reserve = (providersLeft - 1) * reservePerProviderMs;
+  if (remaining - reserve >= minAttemptMs) return Math.min(cap, remaining - reserve);
+  /* 시간이 촉박하면 남은 프로바이더끼리 나눠 갖는다(최소 1.5초). */
+  return Math.min(cap, Math.max(1500, Math.floor(remaining / providersLeft)));
 }
 
 function skipProvider(provider, skip, model) {
@@ -381,6 +425,16 @@ export async function callProvider(opts) {
   }
 }
 
+/** 현재 위치 이후에 아직 살아 있는 프로바이더 수(예산 배분용). */
+function pendingProviders(attempts, index, dead) {
+  const set = new Set();
+  for (let i = index; i < attempts.length; i += 1) {
+    if (dead.has(attempts[i].provider)) continue;
+    set.add(attempts[i].provider);
+  }
+  return Math.max(1, set.size);
+}
+
 /**
  * 풀을 순서대로 돌린다. transform(text) 가 {ok:true,data} 를 돌려주면 성공,
  * 아니면 다음 프로바이더로 넘어간다. repair 가 있으면 형식이 깨진 응답만 같은 AI에 한 번 더 묻는다.
@@ -397,16 +451,30 @@ export async function runPool(opts) {
     fetchImpl,
     env,
     repair,
+    minAttemptMs = 4000,
+    reservePerProviderMs = 2500,
   } = opts;
   const tried = [];
   const exhausted = [];
   const warnings = [];
+  const dead = new Set();
+  let skippedQuota = 0;
   let lastBad = null;
 
   for (let index = 0; index < attempts.length; index += 1) {
     const attempt = attempts[index];
+    /* 같은 턴 안에서 프로바이더 전체가 소진됐으면 그 모델들은 다시 부르지 않는다
+       (그 시간을 뒤쪽 무료 프로바이더에 넘긴다). */
+    if (dead.has(attempt.provider)) { skippedQuota += 1; continue; }
     const remaining = deadline - Date.now();
-    if (remaining < Math.min(3000, perAttemptMs)) {
+    if (remaining < 1200) {
+      warnings.push("남은 시간이 부족해 이후 AI는 시도하지 않았습니다.");
+      break;
+    }
+    /* 아직 실패하지 않은 프로바이더 수 — 그 몫을 남기고 이번 시도의 시간을 정한다. */
+    const providersLeft = pendingProviders(attempts, index, dead);
+    const timeoutMs = allocateTimeout({ remaining, perAttemptMs, providersLeft, minAttemptMs, reservePerProviderMs });
+    if (!timeoutMs) {
       warnings.push("남은 시간이 부족해 이후 AI는 시도하지 않았습니다.");
       break;
     }
@@ -416,7 +484,7 @@ export async function runPool(opts) {
       messages,
       maxTokens,
       temperature,
-      timeoutMs: Math.min(perAttemptMs, remaining),
+      timeoutMs,
       fetchImpl,
       env,
     });
@@ -424,7 +492,14 @@ export async function runPool(opts) {
 
     if (!result.ok) {
       tried.push({ provider: attempt.provider, model: attempt.model, kind: result.kind, status: result.status || 0, ms, reason: result.reason || "" });
-      if (result.kind === "quota") exhausted.push(exhaustionKey(attempt.provider, attempt.model));
+      if (result.kind === "quota") {
+        const key = exhaustionKey(attempt.provider, attempt.model);
+        if (!exhausted.includes(key)) exhausted.push(key);
+        if (key === attempt.provider) dead.add(attempt.provider);
+      } else if (result.kind === "auth") {
+        /* 키가 틀렸으면 그 프로바이더의 다른 모델도 같은 결과다. */
+        dead.add(attempt.provider);
+      }
       continue;
     }
 
@@ -446,7 +521,7 @@ export async function runPool(opts) {
           if (retry.ok) {
             const again = transform(retry.text);
             if (again && again.ok) {
-              return { ok: true, provider: attempt.provider, model: attempt.model, data: again.data, text: retry.text, ms: Date.now() - started, tried, exhausted, warnings, repaired: true };
+              return { ok: true, provider: attempt.provider, model: attempt.model, data: again.data, text: retry.text, ms: Date.now() - started, tried, exhausted, warnings, repaired: true, skippedQuota };
             }
           }
         }
@@ -456,10 +531,10 @@ export async function runPool(opts) {
       continue;
     }
 
-    return { ok: true, provider: attempt.provider, model: attempt.model, data: outcome.data, text: result.text, ms, tried, exhausted, warnings };
+    return { ok: true, provider: attempt.provider, model: attempt.model, data: outcome.data, text: result.text, ms, tried, exhausted, warnings, skippedQuota };
   }
 
-  return { ok: false, tried, exhausted, warnings, reason: lastBad || "" };
+  return { ok: false, tried, exhausted, warnings, reason: lastBad || "", skippedQuota };
 }
 
 /** 실패 목록을 사람이 읽는 한 줄로. */

@@ -232,6 +232,10 @@
       </div>
 
       <div class="rpanel" id="tabArtifacts" hidden>
+        <div class="artifact-tools">
+          <span class="artifact-tools-note">산출물마다 <b>.md</b>로 받거나, 한 번에 ZIP으로 받을 수 있습니다.</span>
+          <button type="button" class="mini" id="btnArtifactZip" title="산출물 전체를 ZIP(.md 파일들)으로 내려받기">⬇ 전체 ZIP</button>
+        </div>
         <div id="artifactList" class="artifact-list"></div>
       </div>
 
@@ -877,6 +881,8 @@
             <span class="build-path" id="buildEditorPath">index.html</span>
             <span class="build-dirty" id="buildDirty"></span>
             <button type="button" class="mini" id="btnBuildSaveFile">적용</button>
+            <button type="button" class="mini" id="btnBuildDownloadFile" title="지금 열린 파일을 그대로 내려받기">⬇ 파일</button>
+            <button type="button" class="mini" id="btnBuildZipQuick" title="생성된 모든 파일을 ZIP으로 내려받기">⬇ ZIP</button>
           </div>
           <textarea id="buildEditorArea" spellcheck="false" autocapitalize="off" aria-label="코드 편집기"></textarea>
         </div>

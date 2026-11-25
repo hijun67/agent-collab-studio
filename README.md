@@ -6,6 +6,7 @@
 - 상단 **모드 전환 탭**으로 두 가지를 한 사이트에서 씁니다.
   - **🤖 에이전트 협업** — 20종 무료 에이전트 가이드 · 팀 투입 · **무료 AI 풀 10턴 협업** · 리포트 · **🛠️ 실제 프로젝트 생성 & 배포**
   - **🎨 4컷만화 · 카드뉴스** — 기사 본문 이미지 + 기사 본문 기반 AI 이미지로 4컷만화·카드뉴스 제작
+- **v2.3** — **마지막 무료 AI까지 끝까지 순환** + **산출물·파일 한 번에 내려받기**. ① 유료(OpenAI)는 자동 순환에서 완전히 빠지고, 사용자가 직접 고르고 자기 키를 넣었을 때만 씁니다(무료 한도 엄수). ② 모델을 **라운드 로빈**으로 섞어 Workers AI가 4006(무료 소진)으로 막혀도 Groq → Gemini → OpenRouter → Cerebras → Mistral의 모든 모델까지 예산 안에서 도달합니다. ③ 시도 시간을 **프로바이더별로 나눠** 앞쪽 AI가 느려도 뒤쪽 무료 AI가 잘리지 않습니다. ④ 턴 안에서 소진된 프로바이더의 남은 모델은 다시 부르지 않고 그 시간을 다음 AI에 넘깁니다. ⑤ 산출물 탭에 항목별 **⬇ .md**와 **⬇ 전체 ZIP**, 빌드 편집기에 **⬇ 파일**·**⬇ ZIP**을 붙였습니다. ⑥ GitHub `main` 푸시 → Cloudflare Pages **자동 빌드·배포**를 연결했습니다(무료 플랜: 월 500 빌드).
 - **v2.2** — **스마트 앱 생성기**. 빌드가 어떤 과제든 "실행 대시보드"만 만들던 문제를 고쳤습니다. 이제 과제 문장의 키워드·의도를 읽어 **실제로 동작하는 웹앱 7종**(포모도로 타이머 · 계산기 · 할 일 트래커 · 플래시카드 퀴즈 · 메모 노트 · 큐레이션 목록 · 실행 대시보드) 중 가장 맞는 것을 만들고, AI가 살아 있을 때도 대시보드가 아니라 과제가 요구한 기능(타이머·계산·추가/삭제·검색·채점·저장)을 구현하도록 프롬프트를 바꿨습니다. 새 과제 모달에 **⚡ 바로 앱 생성** 버튼(10턴 협업 건너뛰고 즉시 빌드)과 협업 속도 **즉시**를 추가했고, 제목과 목표가 붙어 나오던 버그를 없애 `<h1>`·`<title>` 에는 과제 제목만 나옵니다.
 - **v2.1** — **☀️ 라이트 / 🌙 다크 모드 전환**. 헤더와 🎨 스튜디오 상단 바의 토글로 바꾸고 `localStorage`(`acs.theme.v1`)에 기억해 새로고침·재방문에도 유지합니다. 기본은 기존 다크 모드이고, 첫 페인트 전 `<head>` 인라인 스크립트로 저장된 테마를 적용해 깜빡임이 없습니다. 모바일 브라우저 상단 바 색(`theme-color`)도 함께 바뀝니다.
 - **v2.0** — 무료 AI를 최대한 모아 두고 **당일 할당량이 소진되면 다음 무료 AI가 그 턴을 이어받는 자동 로테이션**과, 계획만 짜는 데서 끝나지 않고 **실제 파일 생성 → 코드 편집·미리보기 → ZIP/GitHub Pages/Cloudflare Pages 배포**까지 실행하는 파이프라인을 추가했습니다.
@@ -18,7 +19,7 @@
 
 - **입력 문맥** — 과제 제목·목표·배경/제약·대상·기간, 현재 턴 단계명·담당 에이전트·부여된 역할, 이전 발언 요약, 사용자의 중간 개입 지시, 팀 구성(고정 3인 + 투입 에이전트), 참고 실행 단계·지표·리스크.
 - **출력** — 문단 2~3개 + 항목 2~4개 + 판단 콜아웃. 산출물이 있는 턴(과제 분해·수정 실행안·실행 브리프·첫 3일)은 Markdown 산출물을 함께 만들고, 마지막 턴은 실행 로드맵·리스크·체크리스트·품질 게이트·다음 단계를 AI가 다시 종합합니다. 결과는 `.md`/`.html` 내보내기에 그대로 들어갑니다.
-- **엔진** — `/api/collab` → **무료 AI 풀 자동 로테이션**: Workers AI 4개 모델 → Groq → Gemini → OpenRouter `:free` → Cerebras → Mistral → OpenAI → 로컬 Ollama → 로컬 엔진. 모델이 형식을 깨면 같은 모델에 한 번 더 요청하고, 그래도 안 되면 다음 AI로 넘깁니다.
+- **엔진** — `/api/collab` → **무료 AI 풀 자동 로테이션**: Workers AI → Groq → Gemini → OpenRouter `:free` → Cerebras → Mistral → 로컬 Ollama → 로컬 엔진. **유료(OpenAI)는 자동 순환에서 제외**하고, 모델은 **라운드 로빈**(각 AI의 1번 모델부터)으로 섞어 마지막 무료 AI까지 도달합니다. 모델이 형식을 깨면 같은 모델에 한 번 더 요청하고, 그래도 안 되면 다음 AI로 넘깁니다.
 - **BYOK(선택)** — 헤더 AI 버튼의 **무료 AI 풀**에서 프로바이더별 키를 넣으면 그 AI들이 풀에 합류합니다. 키는 `localStorage`(`acs.ai.v2`)에만 저장되고 서버에 저장하지 않습니다. 고정 엔진(한 AI로만 호출)도 그대로 지원합니다(`acs.ai.v1`).
 - **투명한 폴백** — AI 호출이 실패·오프라인·할당량 초과면 기존 결정론적 엔진으로 그 턴을 만들고, 발언마다 `AI` / `로컬` 배지, 헤더에는 `AI 실시간` / `로컬 폴백` / `로컬 엔진` 상태를 표시합니다. 10턴과 리포트는 어떤 경우에도 끝까지 생성됩니다.
 
@@ -34,11 +35,15 @@
 | 4 | **OpenRouter `:free`** | 무료 50 req/일 | BYOK | 프로바이더 |
 | 5 | **Cerebras** | 1M tokens/일 | BYOK | 모델 |
 | 6 | **Mistral** | 무료 실험 티어 | BYOK | 모델 |
-| 7 | **OpenAI** | 유료(BYOK) | BYOK | 모델 |
-| 8 | **로컬 Ollama** | 내 PC · 무제한 | 불필요 | 프로바이더 |
-| 9 | **로컬 결정론적 엔진** | 항상 · 무료 | 불필요 | — |
+| — | **OpenAI** (자동 순환 제외 · 유료) | 유료(BYOK) | BYOK(직접 고를 때만) | 모델 |
+| 7 | **로컬 Ollama** | 내 PC · 무제한 | 불필요 | 프로바이더 |
+| 8 | **로컬 결정론적 엔진** | 항상 · 무료 | 불필요 | — |
 
 - **소진 감지** — `429`, Workers AI `4006`/`5016`, `quota`, `rate limit`, `insufficient_quota` 같은 응답을 받으면 그 프로바이더(모델 단위 한도면 그 모델)를 **오늘 날짜로 `localStorage`에 표시**하고, **같은 턴을 다음 AI가 즉시 이어서** 만듭니다. 턴이 끊기지 않습니다.
+- **유료는 자동에서 제외 (v2.3)** — `AI_POOL`의 `paid: true`(OpenAI)는 `buildAttempts`가 **자동·폴백 순환에서 완전히 빼고**, 사용자가 AI 설정에서 그 엔진을 직접 고르고 자기 키를 넣은 경우(`prefer` + 사용자 키)에만 호출합니다. 서버 환경변수에 유료 키가 있어도 자동 순환에는 쓰지 않습니다.
+- **마지막 무료 AI까지 (v2.3)** — 시도 목록을 **라운드 로빈**으로 만들어(각 프로바이더의 첫 모델 → 두 번째 모델 …) Workers AI가 4006으로 막혀도 Groq·Gemini·OpenRouter·Cerebras·Mistral의 모든 모델까지 도달합니다. `runPool`은 남은 무료 프로바이더 수만큼 시간을 떼어 두고(`allocateTimeout`) 한 번의 시도 시간을 정하며, 이미 소진된 프로바이더의 남은 모델은 건너뛰어 그 시간을 다음 AI에 넘깁니다.
+- **브라우저 쪽 판단** — Workers AI 하나만 소진돼도 전체를 로컬로 돌리지 않습니다. `freeProvidersLeft()`가 **오늘 아직 쓸 수 있는 무료 AI(서버 키·내 키 포함)**를 세고, 하나도 없을 때만 네트워크 왕복 없이 로컬로 갑니다. 모든 AI가 소진되면 헤더 배지가 `무료 AI 소진`으로 바뀝니다.
+- **예산** — 협업 턴 30초(시도당 14초/리포트 16초), 프로젝트 생성 50초(시도당 20초). 브라우저 요청 타임아웃 38초는 서버 예산보다 길게 두어, 풀을 다 돌린 뒤의 `exhausted` 목록을 브라우저가 반드시 받습니다.
 - **요청에 실어 보내는 것** — `keys`(프로바이더별 BYOK 키), `skip`(오늘 소진된 AI), `prefer`(고정 엔진). 서버는 `exhausted`를 돌려주고 브라우저가 오늘 소진으로 기록합니다.
 - **표시** — 발언 배지에 실제 응답한 AI(`Workers AI` · `Groq` · `Gemini` · `OpenRouter` · `Ollama` · `로컬`), 툴팁에 모델명·응답 시간. 별도 **오늘 소진 초기화** 버튼으로 표시를 지울 수 있습니다.
 - **전체 연결 테스트** — 풀의 각 AI에 아주 작은 요청을 보내 실제 연결을 확인합니다(Workers AI·BYOK는 `/api/ai-pool`, Ollama는 `localhost:11434/api/tags`).
@@ -52,7 +57,7 @@
    - **v2.2 — 결과물은 앱이다.** 과제 문장의 키워드·의도를 읽어 7가지 아키타입 중 맞는 것을 고릅니다: `pomodoro`(25/5/15 타이머 + 할 일) · `calculator`(실시간 계산·분해표·기록) · `todo`(우선순위·필터·진행률) · `quiz`(뒤집는 카드·점수·연속 정답) · `notes`(목록+편집기·검색·태그·.md) · `directory`(검색·분류·D-day·북마크·상세) · `dashboard`(계획·점검 과제 전용).
    - 모든 결과물은 4파일·외부 CDN 0개·`localStorage` 저장·다크/라이트 테마·390px 가로 스크롤 0을 지킵니다. 두 단계(markup → logic)로 나눠 만들 때는 markup 단계의 실제 id 목록을 logic 단계 프롬프트에 그대로 넘겨 DOM 계약이 깨지지 않게 했습니다.
 2. **파일 · 편집 · 미리보기** — 파일 트리에서 파일을 고르고 코드를 직접 고친 뒤 **적용**하면, 샌드박스 `<iframe srcdoc>` 미리보기에서 CSS/JS가 인라인으로 합쳐져 **즉시 실행**됩니다. 편집한 파일은 ZIP과 배포에 그대로 반영됩니다.
-3. **ZIP 다운로드** — 외부 CDN 없이 브라우저에서 직접 만드는 store 방식 ZIP(CRC32·UTF-8 파일명).
+3. **다운로드** — 파일 트리 위 **⬇ 파일**(지금 열린 파일 하나, 이름·확장자 그대로)과 **⬇ ZIP**(프로젝트 전체)이 있고, 배포 탭에도 ZIP 다운로드가 있습니다. ZIP은 외부 CDN 없이 브라우저에서 직접 만드는 store 방식(CRC32·UTF-8 파일명)입니다. **산출물 탭**은 항목마다 **⬇ .md**, 상단 **⬇ 전체 ZIP**(산출물 .md 묶음), 최종 리포트는 **.md 다운로드 / .html 보고서**로 받습니다.
 4. **GitHub 업로드 + Pages 배포** — 브라우저가 GitHub REST API를 직접 호출합니다: 저장소 생성(`POST /user/repos`, 있으면 재사용) → 모든 파일 커밋(`PUT /contents/{path}`, 기존 파일은 sha로 갱신) → **GitHub Pages 활성화**(`POST /pages`) → `https://{계정}.github.io/{저장소}/` 라이브 URL 표시. 토큰(`repo` 권한)은 이 브라우저(`localStorage`)에만 저장됩니다.
 5. **Cloudflare Pages 직접 배포** — `/api/deploy-cf` 프록시가 Direct Upload 6단계(토큰 확인 → 프로젝트 확보 → 업로드 JWT → 자산 업로드 → 해시 등록 → 배포 생성)를 실행하고 `https://{프로젝트}.pages.dev` 를 돌려줍니다. 자산 키는 wrangler와 같은 **`blake3(base64(내용)+확장자)` 32자 해시**(순수 JS BLAKE3 구현)이고, API 토큰은 요청에만 쓰고 저장하지 않습니다.
 
@@ -172,7 +177,7 @@ node .local-tests/agent-collab-studio/test.js            # jsdom: 협업 엔진�
 node .local-tests/agent-collab-studio/functions.test.mjs  # 본문 이미지 정제 추출·영문 프롬프트·무관 장면 교체·이미지 폴백 (31개)
 node .local-tests/agent-collab-studio/collab.test.mjs     # AI 협업 API: 프롬프트·응답 정규화·Workers AI·모델 폴백·BYOK·할당량 안내 (90개)
 node .local-tests/agent-collab-studio/ai.test.js          # jsdom: AI 응답 배선·산출물·리포트·폴백·XSS (64개)
-node .local-tests/agent-collab-studio/pool.test.mjs       # BLAKE3 벡터·무료 AI 풀 로테이션·/api/collab 전환·/api/generate-project·/api/deploy-cf (136개)
+node .local-tests/agent-collab-studio/pool.test.mjs       # BLAKE3 벡터·무료 AI 풀 로테이션·라운드 로빈·예산 배분·유료 제외·마지막 무료 AI까지 시도·/api/collab · /api/generate-project · /api/deploy-cf (167개)
 node .local-tests/agent-collab-studio/ui.test.js          # headless: 협업 화면 조작·다운로드·오버플로·콘솔 에러·모드 전환 (138개)
 node .local-tests/agent-collab-studio/ui-ai.test.js       # headless: AI 실시간 10턴·산출물·리포트·BYOK·390px·폴백 (38개)
 node .local-tests/agent-collab-studio/ui-studio.test.js   # headless: 미러링→4컷→카드뉴스 전 카드 이미지→390px (25개)
@@ -180,12 +185,21 @@ node .local-tests/agent-collab-studio/ui-build.test.js    # headless: AI 풀·�
 node .local-tests/agent-collab-studio/ui-theme.test.js    # headless: 다크/라이트 토글 동기화·FOUC·390px (71개)
 node .local-tests/agent-collab-studio/v22-ui.test.js      # headless: ⚡ 바로 앱 생성 · 즉시 협업 속도 · 제목/목표 분리 (19개)
 node .local-tests/agent-collab-studio/v22-apps.test.js    # headless: 폴백 생성 앱 7종 실제 조작(타이머·할일·계산·퀴즈·노트·목록·대시보드)·390px·콘솔 오류 (46개)
+node .local-tests/agent-collab-studio/v23.test.js         # headless: 유료 제외·Workers AI 소진 뒤에도 AI 계속·모두 소진 시 로컬·산출물 .md/ ZIP·빌드 파일 다운로드 (29개)
 node --test tests/archetypes.test.mjs                     # 저장소 단위 테스트: 아키타입 분류·생성기 구조·제목/목표 버그·프롬프트·API (13개)
 ```
 
 Playwright 테스트는 이 환경의 Chromium 라이브러리 경로가 필요합니다: `LD_LIBRARY_PATH=/workspace/tmp-acs/libs node ...`
 
 ## 배포
+
+**자동 (기본)** — Cloudflare Pages 프로젝트 `agent-collab-studio`는 GitHub `hijun67/agent-collab-studio`의 `main`과 연결되어 있어, **`main`에 푸시하면 자동으로 빌드·배포**됩니다(무료 플랜: 월 500회 빌드).
+
+```bash
+git push origin main      # 자동 빌드·배포 트리거
+```
+
+**수동 (필요할 때)** — Direct Upload로도 올릴 수 있습니다.
 
 ```bash
 npm run build

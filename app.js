@@ -1594,7 +1594,7 @@
     createdAt: null,
     extras: [],
     pendingTurn: false,
-    ai: { ready: null, source: 'local', provider: '', model: '', ms: 0, reason: '', attempted: false, models: [] }
+    ai: { ready: null, source: 'local', provider: '', model: '', ms: 0, reason: '', attempted: false, models: [], poolLoaded: false }
   };
   let autoTimer = null;
   let typingTimer = null;
@@ -1608,7 +1608,7 @@
      - 호출 실패·오프라인·할당량 초과면 아래 결정론적 엔진(buildTurn 등)으로 폴백한다. */
   const LS_AI = 'acs.ai.v1';
   const AI_ENDPOINT = '/api/collab';
-  const AI_TIMEOUT = 22000;
+  const AI_TIMEOUT = 38000;
   const AI_PROVIDERS = [
     { id: 'auto', label: '자동 · Workers AI 무료', short: '자동' },
     { id: 'openai', label: 'OpenAI (본인 키)', short: 'OpenAI' },
@@ -1697,7 +1697,7 @@
       changed = true;
     });
     poolQuota.date = todayKey();
-    if (changed) { saveQuota(); renderPool(); }
+    if (changed) { saveQuota(); renderPool(); renderAiStatus(); }
   }
 
   function resetQuota() {
@@ -1748,6 +1748,26 @@
 
   function aiAvailable() {
     return typeof fetch === 'function' && typeof location !== 'undefined' && /^https?:/.test(location.protocol);
+  }
+
+  /* 오늘 아직 쓸 수 있는 무료 AI 가 남아 있는가?
+     - Workers AI 만 소진돼도 다른 무료 프로바이더(키가 있는 곳)가 남아 있으면 계속 AI 로 시도한다.
+     - 모든 곳이 소진됐을 때만 네트워크 왕복 없이 로컬로 간다. */
+  function freeProvidersLeft() {
+    const rows = (poolRows && poolRows.length ? poolRows : POOL_FALLBACK).filter((row) => {
+      if (!row || row.id === 'local' || row.paid) return false;
+      if (providerExhausted(row.id)) return false;
+      if (row.keyless) return true;                       /* Workers AI — 바인딩 여부는 서버가 판단 */
+      if (String((poolState.keys || {})[row.id] || '').trim()) return true;
+      return Boolean(row.serverKey || row.available);
+    });
+    return rows.map((row) => row.id);
+  }
+
+  function aiPoolUsable() {
+    /* 서버 풀 정보를 아직 못 받았으면 상태를 확신할 수 없으니 시도한다. */
+    if (!state.ai.poolLoaded) return true;
+    return freeProvidersLeft().length > 0;
   }
 
   function aiProviderDef(id) {
@@ -2067,6 +2087,7 @@
       meta: { source: 'local', provider: 'local', model: '', ms: Date.now() - started, reason: reason || '' }
     });
     if (!aiAvailable()) return Promise.resolve(local('offline'));
+    if (!aiPoolUsable()) return Promise.resolve(local('모든 무료 AI 한도 소진 — 00:00 UTC(한국 09:00)에 리셋됩니다.'));
     const payload = aiTurnPayload(turn, stage, p, fresh);
     return aiRequest(payload).then((data) => {
       const ms = Date.now() - started;
@@ -2164,6 +2185,7 @@
       .then((data) => {
         if (data && data.ok && Array.isArray(data.pool) && data.pool.length) {
           poolRows = data.pool;
+          state.ai.poolLoaded = true;
           renderPool();
         }
         return data;
@@ -2175,7 +2197,7 @@
         .then((data) => {
           state.ai.ready = !!(data && data.ok && data.workersAi);
           state.ai.models = (data && data.models) || [];
-          if (data && Array.isArray(data.pool)) { poolRows = data.pool; renderPool(); }
+          if (data && Array.isArray(data.pool)) { poolRows = data.pool; state.ai.poolLoaded = true; renderPool(); }
           if (!state.ai.ready) state.ai.reason = 'Workers AI를 쓸 수 없어 로컬 엔진으로 동작합니다.';
           renderAiStatus();
           probePoolLight();
@@ -2202,7 +2224,7 @@
     fetch(AI_POOL_ENDPOINT, { method: 'GET', headers: { accept: 'application/json' } })
       .then((res) => res.json().catch(() => null))
       .then((data) => {
-        if (data && data.ok && Array.isArray(data.pool)) { poolRows = data.pool; renderPool(); }
+        if (data && data.ok && Array.isArray(data.pool)) { poolRows = data.pool; state.ai.poolLoaded = true; renderPool(); }
       })
       .catch(() => {});
   }
@@ -2228,6 +2250,10 @@
       text = 'AI 확인 중';
       tone = 'is-checking';
       title = 'AI 연결을 확인하고 있습니다.';
+    } else if (!aiPoolUsable()) {
+      text = '무료 AI 소진';
+      tone = 'is-local';
+      title = '무료 AI가 모두 오늘 한도 소진입니다 — 이 턴은 로컬 엔진으로 만들고, 00:00 UTC(한국 09:00)에 자동으로 돌아옵니다. ' + poolSummaryText();
     } else if (ai.ready === false) {
       text = '로컬 엔진';
       tone = 'is-local';
@@ -2250,6 +2276,7 @@
     if (aiConfig.provider !== 'auto') return aiProviderDef().label + ' 키로 호출합니다. 키는 이 브라우저(localStorage)에만 저장됩니다.';
     if (state.ai.ready === null) return 'AI 연결 확인 중…';
     const summary = poolSummaryText();
+    if (!aiPoolUsable()) return '무료 AI가 모두 오늘 한도 소진입니다 — 턴은 로컬 엔진으로 만들고, 00:00 UTC(한국 09:00)에 자동 복구됩니다. (' + summary + ')';
     if (state.ai.ready) return '무료 AI 풀 연결됨 — 키 없이 1순위 Workers AI부터 시작하고, 한도가 차면 다음 AI로 넘어갑니다. (' + summary + ')';
     return (state.ai.reason || 'Workers AI를 쓸 수 없어 로컬 엔진으로 동작합니다.') + ' (' + summary + ')';
   }
@@ -2563,11 +2590,52 @@
   function renderArtifacts() {
     const list = $('#artifactList');
     $('#artifactCount').textContent = String(state.artifacts.length);
+    if ($('#btnArtifactZip')) $('#btnArtifactZip').disabled = !state.artifacts.length;
     list.innerHTML = state.artifacts.length ? state.artifacts.map((a, i) =>
       '<div class="artifact"><div class="artifact-head"><div class="artifact-name"><b>' + esc(a.title) + '</b><span>' + esc(a.agent || '피클') + ' · ' + esc(a.time || '') + '</span></div>' +
-      '<button type="button" class="mini" data-copy-artifact="' + i + '">복사</button></div>' +
+      '<span class="artifact-actions">' +
+      '<button type="button" class="mini" data-download-artifact="' + i + '" title="이 산출물을 .md 파일로 내려받기">⬇ .md</button>' +
+      '<button type="button" class="mini" data-copy-artifact="' + i + '">복사</button></span></div>' +
       '<pre>' + esc(cut(a.content, 420)) + '</pre></div>'
     ).join('') : '<p class="empty-note">협업이 진행되면 실행 단계 초안, 체크리스트, 실행 브리프, 최종 리포트가 이곳에 쌓입니다.</p>';
+  }
+
+  /* 산출물 파일 이름 — 제목을 안전한 파일명으로 바꾸고 순번을 붙인다. */
+  function artifactFileName(artifact, index) {
+    const base = String((artifact && artifact.title) || 'artifact').replace(/[\\/:*?"<>|]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 60) || 'artifact';
+    return String(index + 1).padStart(2, '0') + '-' + base + '.md';
+  }
+
+  function artifactFiles() {
+    return state.artifacts.map((a, i) => ({ path: artifactFileName(a, i), content: String(a.content || '') }));
+  }
+
+  function downloadArtifact(index) {
+    const a = state.artifacts[index];
+    if (!a) return;
+    download(artifactFileName(a, index), String(a.content || ''), 'text/markdown;charset=utf-8');
+    showToast('산출물 .md 파일을 받았습니다');
+  }
+
+  function downloadArtifactZip() {
+    const files = artifactFiles();
+    if (!files.length) { showToast('내려받을 산출물이 없습니다'); return; }
+    const zip = window.ACSBuild && typeof window.ACSBuild.zipFiles === 'function' ? window.ACSBuild.zipFiles(files) : null;
+    if (!zip) {
+      /* ZIP 생성기를 쓸 수 없으면 한 파일로 합쳐 내려받는다. */
+      download('agent-collab-studio-산출물-' + dateLabel() + '.md', files.map((f) => '# ' + f.path + '\n\n' + f.content).join('\n\n---\n\n'), 'text/markdown;charset=utf-8');
+      showToast('산출물을 하나의 .md 파일로 받았습니다');
+      return;
+    }
+    const url = URL.createObjectURL(zip);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'agent-collab-studio-산출물-' + dateLabel() + '.zip';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
+    showToast('산출물 ' + files.length + '개를 ZIP으로 받았습니다');
   }
 
   function renderMetrics() {
@@ -3349,6 +3417,8 @@
     });
 
     $('#artifactList').addEventListener('click', (e) => {
+      const dl = e.target.closest('[data-download-artifact]');
+      if (dl) { downloadArtifact(parseInt(dl.getAttribute('data-download-artifact'), 10)); return; }
       const b = e.target.closest('[data-copy-artifact]');
       if (!b) return;
       const a = state.artifacts[parseInt(b.getAttribute('data-copy-artifact'), 10)];
@@ -3358,6 +3428,7 @@
     });
 
     $('#btnOpenReport').addEventListener('click', () => { switchRightTab('metrics'); openReport(); });
+    if ($('#btnArtifactZip')) $('#btnArtifactZip').addEventListener('click', downloadArtifactZip);
     $('#btnOpenReport2').addEventListener('click', openReport);
     $('#btnCloseReport').addEventListener('click', closeReport);
     $('#reportOverlay').addEventListener('click', (e) => { if (e.target === $('#reportOverlay')) closeReport(); });
@@ -3507,6 +3578,8 @@
       reportAi: () => (state.report ? state.report.ai || null : null),
       /* 무료 AI 풀 */
       poolPayload: () => ({ keys: poolKeys(), skip: poolSkip(), prefer: aiConfig.provider }),
+      poolUsable: () => aiPoolUsable(),
+      freeProviders: () => freeProvidersLeft(),
       pool: () => ({
         rows: poolRows.map((row) => Object.assign({}, row, { status: poolStatus(row) })),
         keys: Object.keys(poolKeys()),

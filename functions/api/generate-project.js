@@ -37,8 +37,10 @@ import {
 import { parseJsonObject } from "./_collab.js";
 
 const MAX_BODY = 120 * 1024;
-const TOTAL_BUDGET = 62000;
-const PER_ATTEMPT = 22000;
+/* 두 단계를 합쳐 50초 안에서 끝낸다. 한 번의 시도는 20초까지 주되, 남은 무료 프로바이더가 있으면
+   그 몫을 남겨 두고 배분한다(_aiPool.allocateTimeout) — Workers AI 가 막혀도 Mistral 까지 간다. */
+const TOTAL_BUDGET = 50000;
+const PER_ATTEMPT = 20000;
 
 /* 한 번에 4파일을 만들면 모델이 16초 안에 끝내지 못한다(실측).
    두 단계로 나눠 각 단계의 출력을 작게 유지한다.
@@ -173,7 +175,7 @@ export async function onRequest(context) {
   const skip = normalizeSkip(body.skip);
   const prefer = clean(body.prefer, 30) || "auto";
   const model = clean(body.model, 80);
-  const models = model ? { [prefer]: model } : {};
+  const models = model && prefer !== "auto" ? { [prefer]: model } : {};
   const attempts = buildAttempts({ keys, skip, prefer, models, env, includeWorkersAi: true });
 
   const prompts = buildProjectPrompt(mission, report);

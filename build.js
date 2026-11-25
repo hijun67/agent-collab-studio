@@ -279,6 +279,22 @@
       });
   }
 
+  /* 지금 편집기에 열린 파일 하나를 그대로 내려받는다. */
+  function downloadCurrentFile() {
+    var file = currentFile();
+    if (!file) { setNote('#buildZipNote', '먼저 프로젝트를 생성하세요.', 'warn'); return; }
+    applyEdit();
+    var name = String(file.path.split('/').pop() || 'file.txt');
+    var mime = /\.html?$/i.test(name) ? 'text/html'
+      : /\.css$/i.test(name) ? 'text/css'
+      : /\.js$/i.test(name) ? 'text/javascript'
+      : /\.json$/i.test(name) ? 'application/json'
+      : /\.md$/i.test(name) ? 'text/markdown'
+      : 'text/plain';
+    download(new Blob([file.content], { type: mime + ';charset=utf-8' }), name);
+    setNote('#buildZipNote', name + ' 파일을 받았습니다 (' + fmtBytes(file.bytes || 0) + ')', 'ok');
+  }
+
   function shortModel(model) {
     var text = String(model || '');
     return text.length > 34 ? text.slice(0, 33) + '…' : text;
@@ -746,6 +762,13 @@
     });
     $('#btnBuildRefresh').addEventListener('click', function () { applyEdit(); renderPreview(); });
     $('#btnBuildSaveFile').addEventListener('click', function () { applyEdit(); renderPreview(); });
+    if ($('#btnBuildDownloadFile')) $('#btnBuildDownloadFile').addEventListener('click', downloadCurrentFile);
+    if ($('#btnBuildZipQuick')) $('#btnBuildZipQuick').addEventListener('click', function () {
+      if (!state.project) { setNote('#buildZipNote', '먼저 프로젝트를 생성하세요.', 'warn'); return; }
+      applyEdit();
+      download(buildZip(state.project.files), state.project.name + '.zip');
+      setNote('#buildZipNote', 'ZIP을 만들었습니다 — ' + state.project.files.length + '개 파일', 'ok');
+    });
     $('#buildEditorArea').addEventListener('input', function () {
       state.dirty = true;
       if ($('#buildDirty')) $('#buildDirty').textContent = '수정됨';
@@ -771,6 +794,7 @@
     generate: generate,
     previewDoc: previewDoc,
     buildZip: function () { return state.project ? buildZip(state.project.files) : null; },
+    zipFiles: function (files) { return buildZip(files || []); },
     files: function () { return state.project ? state.project.files.map(function (f) { return { path: f.path, bytes: f.bytes }; }) : []; },
     project: function () { return state.project ? { name: state.project.name, title: state.project.title, source: state.project.source } : null; },
     setProject: applyProject,

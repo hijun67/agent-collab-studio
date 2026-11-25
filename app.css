@@ -442,6 +442,10 @@ svg.ico { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-wi
 .task-meta { font-family: var(--mono); }
 
 .artifact-list { display: flex; flex-direction: column; gap: 9px; }
+.artifact-tools { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 9px; flex-wrap: wrap; }
+.artifact-tools-note { font-size: 10.5px; color: var(--faint); line-height: 1.45; }
+.artifact-tools-note b { color: #bae6fd; font-weight: 700; }
+.artifact-actions { display: inline-flex; align-items: center; gap: 5px; flex: 0 0 auto; }
 .artifact { border: 1px solid var(--line); border-radius: var(--r-md); background: rgba(13, 20, 33, 0.72); overflow: hidden; }
 .artifact-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 9px 10px; border-bottom: 1px solid var(--line-soft); }
 .artifact-name { min-width: 0; }
@@ -1133,6 +1137,7 @@ body.mode-studio .topbar-controls { display: none !important; }
 :root[data-theme="light"] .pill.review { color: #92400e; background: rgba(251, 191, 36, 0.16); border-color: rgba(180, 83, 9, 0.26); }
 :root[data-theme="light"] .pill.done { color: #047857; background: rgba(5, 150, 105, 0.12); border-color: rgba(4, 120, 87, 0.24); }
 :root[data-theme="light"] .artifact { background: #ffffff; }
+:root[data-theme="light"] .artifact-tools-note b { color: #1d4ed8; }
 :root[data-theme="light"] .artifact-name b { color: #1d4ed8; }
 :root[data-theme="light"] .artifact pre { color: #33445c; background: rgba(15, 23, 42, 0.03); }
 :root[data-theme="light"] .metric,

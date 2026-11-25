@@ -15,7 +15,9 @@
  *  }
  *  → {ok, mode, provider, providerLabel, model, ms, turn|report, tried[], exhausted[], warnings[]}
  *
- *  - 기본은 무료 AI 풀: Workers AI → Groq → Gemini → OpenRouter → Cerebras → Mistral → OpenAI.
+ *  - 기본은 무료 AI 풀: Workers AI → Groq → Gemini → OpenRouter → Cerebras → Mistral.
+ *    모델은 라운드 로빈으로 섮여, Workers AI 가 4006/quota 로 막혀도 남은 무료 AI 의 모든 모델까지
+ *    예산 안에서 시도한다. 유료(OpenAI)는 자동 순환에서 완전히 제외된다(BYOK 로 직접 고를 때만).
  *  - 한 프로바이더/모델이 429·4006·quota 를 돌려주면 exhausted 에 담아 알려 주고, 그 턴은
  *    다음 AI 가 이어서 만든다. 브라우저는 exhausted 를 오늘 하루 건너뛴다(localStorage).
  *  - 모두 실패하면 ok:false 를 돌려주고 브라우저는 결정론적 로컬 엔진으로 폴백한다.
@@ -42,9 +44,12 @@ import {
   runPool,
 } from "./_aiPool.js";
 
-const TURN_TIMEOUT = 15000;
-const REPORT_TIMEOUT = 18000;
-const TOTAL_BUDGET = 34000;
+/* 무료 한도 안에서 끝까지 돌린다.
+   브라우저의 요청 타임아웃(38초)보다 짧게 두어, 풀을 다 돌린 뒤의 exhausted 목록을
+   브라우저가 반드시 받게 한다(중간에 끊기면 소진 표시가 유실된다). */
+const TURN_TIMEOUT = 14000;
+const REPORT_TIMEOUT = 16000;
+const TOTAL_BUDGET = 30000;
 const MAX_BODY = 80 * 1024;
 
 function json(data, status = 200) {
@@ -160,7 +165,7 @@ export async function onRequest(context) {
       ok: true,
       service: "agent-collab-studio",
       endpoint: "collab",
-      version: "2.1.0",
+      version: "2.3.0",
       workersAi: Boolean(env && env.AI && typeof env.AI.run === "function"),
       models: COLLAB_MODELS,
       byok: Object.keys(BYOK_PROVIDERS),
@@ -203,6 +208,7 @@ export async function onRequest(context) {
   const fallbackTitle = req.mode === "report" ? "최종 결과물 리포트" : "";
 
   let result;
+  let attemptProviders = [];
   if (req.byok) {
     result = await callByok(req, messages, fallbackTitle);
   } else {
@@ -212,6 +218,7 @@ export async function onRequest(context) {
     const model = String(req.model || "").slice(0, 80);
     const models = model && prefer !== "auto" ? { [prefer]: model } : {};
     const attempts = buildAttempts({ keys, skip, prefer, models, env, includeWorkersAi: true });
+    attemptProviders = attempts.reduce((list, item) => (list.includes(item.provider) ? list : list.concat(item.provider)), []);
     if (!attempts.length) {
       return json({
         ok: false,
@@ -253,8 +260,12 @@ export async function onRequest(context) {
     const exhausted = result.exhausted || [];
     if (exhausted.length && joined) {
       message = "무료 AI 할당량이 소진되었습니다 — " + joined + ". 00:00 UTC(한국 09:00)에 리셋되며, 이 턴은 로컬 엔진으로 만듭니다.";
+      if (attemptProviders.length <= 1) {
+        message += " 지금은 Workers AI만 등록되어 있습니다 — Groq·Gemini·OpenRouter 등 무료 키를 넣으면 자동으로 이어서 시도합니다.";
+      }
     } else if (/4006|free allocation|neurons|quota/i.test(joined)) {
-      message = "Workers AI 무료 일일 할당량(10,000 neurons)이 소진되었습니다. 00:00 UTC(한국 09:00) 이후 다시 시도해 주세요.";
+      message = "Workers AI 무료 일일 할당량(10,000 neurons)이 소진되어, 남은 무료 AI를 모두 시도했지만 이 턴은 만들지 못했습니다. 00:00 UTC(한국 09:00)에 리셋됩니다.";
+      if (attemptProviders.length <= 1) message += " 다른 무료 AI 키(Groq·Gemini 등)를 넣으면 소진 직후 자동으로 이어받습니다.";
     } else if (/deprecated|5028|model_gone/i.test(joined)) {
       message = "이 모델은 제공이 종료되었습니다. 다음 모델로 다시 시도해 주세요.";
     } else if (/JSON|형식 불일치/i.test(joined) && !result.message) {
