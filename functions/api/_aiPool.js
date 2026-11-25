@@ -65,7 +65,7 @@ export const AI_POOL = [
     kind: "openai",
     endpoint: "https://openrouter.ai/api/v1/chat/completions",
     free: "무료 :free 모델 50 req/일",
-    quotaScope: "provider",
+    quotaScope: "model",
     envKey: "OPENROUTER_API_KEY",
     keyHint: "sk-or-…",
     help: "https://openrouter.ai/keys",

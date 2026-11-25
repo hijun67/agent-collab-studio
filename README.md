@@ -34,7 +34,7 @@
 | 1 | **Cloudflare Workers AI** | 10,000 neurons/일 | 불필요(서버 바인딩) | 프로바이더 |
 | 2 | **Groq** | 1,000 req/일 | BYOK | 모델 |
 | 3 | **Google Gemini** | 무료 티어(분당·일일) | BYOK | 모델 |
-| 4 | **OpenRouter `:free`** | 무료 50 req/일 | BYOK | 프로바이더 |
+| 4 | **OpenRouter `:free`** | 무료 50 req/일 | BYOK | 모델 |
 | 5 | **Cerebras** | 1M tokens/일 | BYOK | 모델 |
 | 6 | **Mistral** | 무료 실험 티어 | BYOK | 모델 |
 | — | **OpenAI** (자동 순환 제외 · 유료) | 유료(BYOK) | BYOK(직접 고를 때만) | 모델 |
