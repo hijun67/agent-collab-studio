@@ -27,7 +27,7 @@ export const BYOK_PROVIDERS = {
   },
   gemini: {
     label: "Google Gemini",
-    defaultModel: "gemini-2.5-flash",
+    defaultModel: "gemini-3.5-flash-lite",
     base: "https://generativelanguage.googleapis.com/v1beta/models/",
   },
   openrouter: {

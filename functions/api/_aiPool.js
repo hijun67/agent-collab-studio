@@ -56,7 +56,7 @@ export const AI_POOL = [
     envKey: "GEMINI_API_KEY",
     keyHint: "AIza…",
     help: "https://aistudio.google.com/app/apikey",
-    models: ["gemini-2.5-flash", "gemini-2.5-flash-lite"],
+    models: ["gemini-3.5-flash-lite", "gemini-3.8-flash", "gemini-flash-latest"],
   },
   {
     id: "openrouter",

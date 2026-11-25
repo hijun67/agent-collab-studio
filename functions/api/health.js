@@ -9,7 +9,7 @@ export async function onRequest(context) {
   const data = {
     ok: true,
     service: "agent-collab-studio",
-    version: "2.3.0",
+    version: "2.3.1",
     modes: ["agent", "studio"],
     time: new Date().toISOString(),
     features: {
@@ -30,6 +30,7 @@ export async function onRequest(context) {
       aiPoolPaidAuto: false,
       aiPoolBudgetSplit: true,
       artifactDownloads: ["md", "zip"],
+      geminiModels: ["gemini-3.5-flash-lite", "gemini-3.8-flash", "gemini-flash-latest"],
       generateProject: true,
       generateProjectArchetypes: ["pomodoro", "calculator", "todo", "quiz", "notes", "directory", "dashboard"],
       smartFallback: true,
