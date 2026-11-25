@@ -1,6 +1,6 @@
 {
   "name": "agent-collab-studio",
-  "version": "2.3.1",
+  "version": "2.3.2",
   "private": true,
   "description": "피클·제미나이 태스크·코덱스 협업 스튜디오 — 스마트 앱 생성기(7 아키타입) + 실제 파일 생성·GitHub Pages/Cloudflare Pages 배포",
   "type": "module",
