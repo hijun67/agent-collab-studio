@@ -9,7 +9,7 @@ export async function onRequest(context) {
   const data = {
     ok: true,
     service: "agent-collab-studio",
-    version: "2.1.0",
+    version: "2.2.0",
     modes: ["agent", "studio"],
     time: new Date().toISOString(),
     features: {
@@ -27,6 +27,11 @@ export async function onRequest(context) {
       aiPoolOrder: ["workers-ai", "groq", "gemini", "openrouter", "cerebras", "mistral", "openai", "ollama", "local"],
       aiPoolRotation: true,
       generateProject: true,
+      generateProjectArchetypes: ["pomodoro", "calculator", "todo", "quiz", "notes", "directory", "dashboard"],
+      smartFallback: true,
+      twoPhasePrompt: true,
+      instantBuild: true,
+      instantSpeed: true,
       projectFiles: ["index.html", "style.css", "app.js", "README.md"],
       deployGithub: true,
       deployCloudflarePages: true,
