@@ -26,8 +26,11 @@ import {
   runPool,
 } from "./_aiPool.js";
 import {
+  ARCHETYPE_HINTS,
   PROJECT_LIMITS,
   buildProjectPrompt,
+  detectArchetype,
+  extractIds,
   fallbackProject,
   normalizeProject,
 } from "./_project.js";
@@ -38,29 +41,40 @@ const TOTAL_BUDGET = 62000;
 const PER_ATTEMPT = 22000;
 
 /* 한 번에 4파일을 만들면 모델이 16초 안에 끝내지 못한다(실측).
-   두 단계로 나눠 각 단계의 출력을 작게 유지한다. */
-const PHASES = [
-  {
-    key: "markup",
-    files: ["index.html", "style.css"],
-    tokens: 1800,
-    ask:
-      "지금은 index.html 과 style.css 두 파일만 만드세요. index.html 은 실행 대시보드 화면(헤더·진행률·단계·체크리스트·리스크·메모)을 담고, " +
-      "style.css 를 상대경로로 연결하며 app.js 도 <script src=\"app.js\"></script> 로 연결하세요(내용은 다음 단계에서 만듭니다). " +
-      "다음 단계의 app.js 가 쓰도록 아래 id 를 index.html 에 반드시 넣으세요: " +
-      "id=\"progress\"(진행률 텍스트), id=\"progress-bar\"(진행률 막대), id=\"theme-toggle\"(테마 버튼), id=\"memo\"(메모 textarea), " +
-      "그리고 체크리스트의 각 input 에 class=\"check\" 를 붙이세요. 각 파일은 130줄 이내로 간결하게 쓰되 실제로 보기 좋은 완성 화면이어야 합니다.",
-  },
-  {
-    key: "logic",
-    files: ["app.js", "README.md"],
-    tokens: 1400,
-    ask:
-      "지금은 app.js 와 README.md 두 파일만 만드세요. app.js 는 아래에 그대로 붙은 index.html 의 id/class 만 사용해 " +
-      "체크박스(class=\"check\") 토글·진행률(#progress·#progress-bar) 계산·localStorage 저장·테마 전환(#theme-toggle)·메모 자동 저장(#memo)을 구현합니다. " +
-      "모든 요소 접근에 null 확인을 넣어, 요소가 없어도 오류로 멈추지 않게 하세요. README.md 는 프로젝트 소개·파일 목록·실행 방법·GitHub Pages/Cloudflare Pages 배포 방법을 적습니다. 각 120줄 이내.",
-  },
-];
+   두 단계로 나눠 각 단계의 출력을 작게 유지한다.
+   v2.2 — "실행 대시보드" 하드코딩을 없애고, 과제가 요구하는 실제 앱을 만들게 한다.
+   (계획·점검 성격 과제일 때만 대시보드를 결과물로 지시한다.) */
+function buildPhases(mission) {
+  const arche = detectArchetype(mission, null);
+  const hint = ARCHETYPE_HINTS[arche.id] || ARCHETYPE_HINTS.todo;
+  const appStyle = arche.id === "dashboard"
+    ? "이 과제는 계획·점검 성격입니다. 실행 대시보드(진행률·단계·체크리스트·리스크·메모)를 만들되 체크·메모·테마는 실제로 동작해야 합니다."
+    : "결과물은 이 과제가 요구하는 **동작하는 앱**입니다 — " + hint + ". 기획서·로드맵·점검표 화면으로 대체하지 마세요.";
+  return [
+    {
+      key: "markup",
+      files: ["index.html", "style.css"],
+      tokens: 1900,
+      ask:
+        "지금은 index.html 과 style.css 두 파일만 만드세요. " + appStyle + " " +
+        "index.html 은 앱 화면(입력·버튼·목록·결과 영역)을 담고, <h1> 에는 과제 제목만 넣으며 목표 문장은 <p class=\"lead\"> 로 따로 쓰세요. " +
+        "제목과 목표를 붙여 쓰지 마세요. style.css 를 상대경로로 연결하고 app.js 도 <script src=\"app.js\"></script> 로 연결하세요(내용은 다음 단계). " +
+        "다음 단계의 app.js 가 쓸 id 를 지금 정해 모두 실제로 넣으세요 — id=\"theme-toggle\"(테마 버튼)은 반드시 포함하고, " +
+        "조작 요소(입력창·추가/시작 버튼·목록 컨테이너·결과 표시)마다 id 를 붙이세요. " +
+        "각 파일은 220줄 이내로 쓰되 실제로 보기 좋고 390px 에서 가로로 넘치지 않아야 합니다.",
+    },
+    {
+      key: "logic",
+      files: ["app.js", "README.md"],
+      tokens: 1700,
+      ask:
+        "지금은 app.js 와 README.md 두 파일만 만드세요. app.js 는 아래에 붙은 index.html 의 실제 id/class 만 사용해 " +
+        "모든 버튼·입력을 실제 동작으로 연결하고(예: " + hint + "), 상태를 localStorage 에 저장하며 #theme-toggle 로 다크/라이트 테마를 바꿉니다. " +
+        "모든 요소 접근에 null 확인을 넣어 요소가 없어도 오류로 멈추지 않게 하세요. " +
+        "README.md 는 앱 소개·기능 목록·파일 목록·실행 방법·GitHub Pages/Cloudflare Pages 배포 방법을 적습니다. 각 160줄 이내.",
+    },
+  ];
+}
 
 function json(data, status = 200) {
   return new Response(JSON.stringify(data), {
@@ -135,6 +149,7 @@ export async function onRequest(context) {
       pool: publicPool(env),
       files: ["index.html", "style.css", "app.js", "README.md"],
       limits: PROJECT_LIMITS,
+      archetypes: ["pomodoro", "calculator", "todo", "quiz", "notes", "directory", "dashboard"],
     });
   }
   if (method !== "POST") return json({ ok: false, code: "method_not_allowed", message: "POST 로 호출해 주세요." }, 405);
@@ -174,20 +189,23 @@ export async function onRequest(context) {
   const collected = {};
   let failedReason = "";
 
+  const phases = buildPhases(mission);
   if (attempts.length) {
     let remaining = attempts.slice();
-    for (const phase of PHASES) {
+    for (const phase of phases) {
       if (!remaining.length) break;
       if (started + TOTAL_BUDGET - Date.now() < 6000) {
         warnings.push("시간이 부족해 남은 단계는 로컬 생성기로 채웁니다.");
         failedReason = "시간 초과";
         break;
       }
+      const markupIds = phase.key === "logic" ? extractIds(collected["index.html"] || "") : [];
       const phaseUser = [
         prompts.user,
         "",
         "이번 단계에서 만들 파일: " + phase.files.join(", "),
         phase.ask,
+        markupIds.length ? "index.html 에 실제로 들어 있는 id (app.js 는 이것만 사용하세요): " + markupIds.join(", ") : "",
         Object.keys(collected).length
           ? "이미 만든 파일: " + Object.keys(collected).join(", ") + "\n앞 단계 index.html 전체:\n```html\n" +
             String(collected["index.html"] || "").slice(0, 3500) + "\n```"

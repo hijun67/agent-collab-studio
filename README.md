@@ -6,6 +6,7 @@
 - 상단 **모드 전환 탭**으로 두 가지를 한 사이트에서 씁니다.
   - **🤖 에이전트 협업** — 20종 무료 에이전트 가이드 · 팀 투입 · **무료 AI 풀 10턴 협업** · 리포트 · **🛠️ 실제 프로젝트 생성 & 배포**
   - **🎨 4컷만화 · 카드뉴스** — 기사 본문 이미지 + 기사 본문 기반 AI 이미지로 4컷만화·카드뉴스 제작
+- **v2.2** — **스마트 앱 생성기**. 빌드가 어떤 과제든 "실행 대시보드"만 만들던 문제를 고쳤습니다. 이제 과제 문장의 키워드·의도를 읽어 **실제로 동작하는 웹앱 7종**(포모도로 타이머 · 계산기 · 할 일 트래커 · 플래시카드 퀴즈 · 메모 노트 · 큐레이션 목록 · 실행 대시보드) 중 가장 맞는 것을 만들고, AI가 살아 있을 때도 대시보드가 아니라 과제가 요구한 기능(타이머·계산·추가/삭제·검색·채점·저장)을 구현하도록 프롬프트를 바꿨습니다. 새 과제 모달에 **⚡ 바로 앱 생성** 버튼(10턴 협업 건너뛰고 즉시 빌드)과 협업 속도 **즉시**를 추가했고, 제목과 목표가 붙어 나오던 버그를 없애 `<h1>`·`<title>` 에는 과제 제목만 나옵니다.
 - **v2.1** — **☀️ 라이트 / 🌙 다크 모드 전환**. 헤더와 🎨 스튜디오 상단 바의 토글로 바꾸고 `localStorage`(`acs.theme.v1`)에 기억해 새로고침·재방문에도 유지합니다. 기본은 기존 다크 모드이고, 첫 페인트 전 `<head>` 인라인 스크립트로 저장된 테마를 적용해 깜빡임이 없습니다. 모바일 브라우저 상단 바 색(`theme-color`)도 함께 바뀝니다.
 - **v2.0** — 무료 AI를 최대한 모아 두고 **당일 할당량이 소진되면 다음 무료 AI가 그 턴을 이어받는 자동 로테이션**과, 계획만 짜는 데서 끝나지 않고 **실제 파일 생성 → 코드 편집·미리보기 → ZIP/GitHub Pages/Cloudflare Pages 배포**까지 실행하는 파이프라인을 추가했습니다.
 - 협업 모드는 각 턴의 발언·분석·검증·산출물과 최종 리포트를 **Cloudflare Workers AI 무료 텍스트 모델**로 실제 생성합니다(`/api/collab`). 키 입력 없이 바로 동작하고, 모델·할당량 문제로 실패하면 **브라우저 내 결정론적 엔진**으로 자동 폴백합니다. AI/로컬 여부는 발언마다 배지로 표시합니다.
@@ -47,7 +48,9 @@
 
 협업 화면 오른쪽 **🛠️ 빌드** 탭 또는 최종 리포트의 **실제 프로젝트 생성 & 배포** 버튼으로 엽니다.
 
-1. **프로젝트 생성** — `/api/generate-project` 가 과제·최종 리포트를 무료 AI 풀에 보내 `index.html` · `style.css` · `app.js` · `README.md` 를 실제 동작 코드로 만듭니다. AI가 없거나 형식이 깨져도 **과제 맞춤형 로컬 생성기**가 같은 파일 세트를 만듭니다(진행률·체크리스트 localStorage 저장·테마·JSON 내보내기까지 동작).
+1. **프로젝트 생성** — `/api/generate-project` 가 과제·최종 리포트를 무료 AI 풀에 보내 `index.html` · `style.css` · `app.js` · `README.md` 를 실제 동작 코드로 만듭니다. AI가 없거나 형식이 깨져도 **과제 맞춤형 스마트 로컬 생성기**가 같은 파일 세트를 만듭니다(v2.2).
+   - **v2.2 — 결과물은 앱이다.** 과제 문장의 키워드·의도를 읽어 7가지 아키타입 중 맞는 것을 고릅니다: `pomodoro`(25/5/15 타이머 + 할 일) · `calculator`(실시간 계산·분해표·기록) · `todo`(우선순위·필터·진행률) · `quiz`(뒤집는 카드·점수·연속 정답) · `notes`(목록+편집기·검색·태그·.md) · `directory`(검색·분류·D-day·북마크·상세) · `dashboard`(계획·점검 과제 전용).
+   - 모든 결과물은 4파일·외부 CDN 0개·`localStorage` 저장·다크/라이트 테마·390px 가로 스크롤 0을 지킵니다. 두 단계(markup → logic)로 나눠 만들 때는 markup 단계의 실제 id 목록을 logic 단계 프롬프트에 그대로 넘겨 DOM 계약이 깨지지 않게 했습니다.
 2. **파일 · 편집 · 미리보기** — 파일 트리에서 파일을 고르고 코드를 직접 고친 뒤 **적용**하면, 샌드박스 `<iframe srcdoc>` 미리보기에서 CSS/JS가 인라인으로 합쳐져 **즉시 실행**됩니다. 편집한 파일은 ZIP과 배포에 그대로 반영됩니다.
 3. **ZIP 다운로드** — 외부 CDN 없이 브라우저에서 직접 만드는 store 방식 ZIP(CRC32·UTF-8 파일명).
 4. **GitHub 업로드 + Pages 배포** — 브라우저가 GitHub REST API를 직접 호출합니다: 저장소 생성(`POST /user/repos`, 있으면 재사용) → 모든 파일 커밋(`PUT /contents/{path}`, 기존 파일은 sha로 갱신) → **GitHub Pages 활성화**(`POST /pages`) → `https://{계정}.github.io/{저장소}/` 라이브 URL 표시. 토큰(`repo` 권한)은 이 브라우저(`localStorage`)에만 저장됩니다.
@@ -174,6 +177,10 @@ node .local-tests/agent-collab-studio/ui.test.js          # headless: 협업 화
 node .local-tests/agent-collab-studio/ui-ai.test.js       # headless: AI 실시간 10턴·산출물·리포트·BYOK·390px·폴백 (38개)
 node .local-tests/agent-collab-studio/ui-studio.test.js   # headless: 미러링→4컷→카드뉴스 전 카드 이미지→390px (25개)
 node .local-tests/agent-collab-studio/ui-build.test.js    # headless: AI 풀·소진 전환·파일 생성·편집·미리보기·ZIP·GitHub Pages·Cloudflare·390px (60개)
+node .local-tests/agent-collab-studio/ui-theme.test.js    # headless: 다크/라이트 토글 동기화·FOUC·390px (71개)
+node .local-tests/agent-collab-studio/v22-ui.test.js      # headless: ⚡ 바로 앱 생성 · 즉시 협업 속도 · 제목/목표 분리 (19개)
+node .local-tests/agent-collab-studio/v22-apps.test.js    # headless: 폴백 생성 앱 7종 실제 조작(타이머·할일·계산·퀴즈·노트·목록·대시보드)·390px·콘솔 오류 (46개)
+node --test tests/archetypes.test.mjs                     # 저장소 단위 테스트: 아키타입 분류·생성기 구조·제목/목표 버그·프롬프트·API (13개)
 ```
 
 Playwright 테스트는 이 환경의 Chromium 라이브러리 경로가 필요합니다: `LD_LIBRARY_PATH=/workspace/tmp-acs/libs node ...`

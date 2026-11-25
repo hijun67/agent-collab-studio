@@ -516,9 +516,23 @@
       .replace(/\{title\}/g, esc(p.title));
   }
 
+  /* 제목 뒤에 목표 문장이 그대로 붙어 들어온 경우 제목만 남긴다.
+     (예: "포모도로 집중 타이머 & 오늘 할 일25분 집중 / 5분 휴식…" → "포모도로 집중 타이머 & 오늘 할 일") */
+  function cleanTitleText(title, goal) {
+    let t = String(title || '').replace(/\s+/g, ' ').trim();
+    const g = String(goal || '').replace(/\s+/g, ' ').trim();
+    if (!t || !g) return t;
+    if (t.length > g.length && t.endsWith(g)) t = t.slice(0, t.length - g.length).trim();
+    if (g.length >= 12) {
+      const head = g.slice(0, Math.min(28, g.length));
+      if (t.length > head.length && t.endsWith(head)) t = t.slice(0, t.length - head.length).replace(/[\s:·\-–—,]+$/, '').trim();
+    }
+    return t || String(title || '').trim();
+  }
+
   function analyzeMission(input) {
     const raw = {
-      title: String((input && input.title) || '').trim() || '새 과제',
+      title: cleanTitleText(String((input && input.title) || '').trim() || '새 과제', String((input && input.goal) || '').trim()) || '새 과제',
       goal: String((input && input.goal) || '').trim(),
       context: String((input && input.context) || '').trim()
     };
@@ -2588,7 +2602,7 @@
     }
     btn.disabled = state.completed;
     $('#btnStep').disabled = state.completed || state.busy;
-    $('#speedLabel').textContent = state.speed + 'x';
+    $('#speedLabel').textContent = state.speed === 'instant' ? '즉시' : state.speed + 'x';
     $('#btnFocus').className = 'mini' + (state.focus ? ' is-on' : '');
     $('#app').classList.toggle('focus-left', state.focus);
   }
@@ -2711,7 +2725,8 @@
 
     const runToken = state.runId;
     const started = Date.now();
-    const minDelay = Math.max(160, Math.round(480 / state.speed));
+    const speedNum = state.speed === 'instant' ? 12 : state.speed;
+    const minDelay = Math.max(0, Math.round(480 / speedNum));
     const finish = (result, meta) => {
       if (runToken !== state.runId) return; /* 새 과제가 시작됐으면 이 응답은 버린다 */
       hideTyping();
@@ -2727,7 +2742,7 @@
       renderAiStatus();
       if (state.autoPlay && !state.completed) {
         clearTimeout(autoTimer);
-        autoTimer = setTimeout(() => executeTurn(false), Math.max(320, Math.round(760 / state.speed)));
+        autoTimer = setTimeout(() => executeTurn(false), Math.max(60, Math.round(760 / speedNum)));
       }
     };
 
@@ -2757,6 +2772,16 @@
     if (state.completed) return;
     state.autoPlay = true;
     renderControls();
+    /* 즉시 모드 — AI·턴 딜레이 없이 10턴을 한 번에 마치고 결과물로 바로 간다. */
+    if (state.speed === 'instant') {
+      runTurns(TURN_TOTAL, true);
+      state.autoPlay = false;
+      clearTimeout(autoTimer);
+      autoTimer = null;
+      renderControls();
+      showToast('즉시 모드 — 10턴을 한 번에 마쳤습니다. 결과물을 확인하세요');
+      return;
+    }
     executeTurn(false);
   }
   function stopAuto() {
@@ -3173,6 +3198,25 @@
     window.ACSBuild.open(buildContext);
     renderBuildTab();
   }
+
+  /* ⚡ 바로 앱 생성 — 10턴 협업을 건너뛰고, 과제 분석 결과만으로 빌드 모달에서 바로 앱을 만든다. */
+  function instantAppBuild() {
+    const titleEl = $('#inputTitle');
+    const title = titleEl ? titleEl.value.trim() : '';
+    if (!title) { if (titleEl) titleEl.focus(); showToast('과제 제목을 먼저 입력하세요'); return; }
+    const goalEl = $('#inputGoal');
+    const contextEl = $('#inputContext');
+    const goal = goalEl ? goalEl.value.trim() : '';
+    const context = contextEl ? contextEl.value.trim() : '';
+    closeNewModal();
+    startMission({ title, goal, context }, { silent: true });
+    renderAll();
+    saveSession();
+    if (!window.ACSBuild) { showToast('빌드 모듈을 불러오지 못했습니다'); return; }
+    window.ACSBuild.open(buildContext, { autostart: true });
+    renderBuildTab();
+    showToast('⚡ 10턴 협업을 건너뛰고 바로 앱을 만듭니다');
+  }
   function switchMobileTab(tab) {
     state.mobileTab = tab;
     $$('.mtab').forEach((b) => {
@@ -3196,10 +3240,10 @@
       executeTurn(false);
     });
     $('#btnSpeed').addEventListener('click', () => {
-      const seq = [1, 2, 4];
+      const seq = [1, 2, 4, 'instant'];
       state.speed = seq[(seq.indexOf(state.speed) + 1) % seq.length];
       renderControls();
-      showToast('협업 속도 ' + state.speed + 'x');
+      showToast(state.speed === 'instant' ? '협업 속도 즉시 — 자동 진행을 누르면 10턴을 한 번에 마칩니다' : '협업 속도 ' + state.speed + 'x');
     });
     $('#btnNew').addEventListener('click', () => openNewModal());
     $('#btnHistory').addEventListener('click', openHistory);
@@ -3353,6 +3397,7 @@
       startMission({ title, goal, context });
       showToast('과제 분석 완료 — 피클이 협업을 시작합니다');
     });
+    if ($('#btnInstantBuild')) $('#btnInstantBuild').addEventListener('click', instantAppBuild);
 
     document.addEventListener('keydown', (e) => {
       if (e.key !== 'Escape') return;
@@ -3480,7 +3525,10 @@
       open: openBuild,
       close: () => { if (window.ACSBuild) window.ACSBuild.close(); },
       context: buildContext
-    }
+    },
+    instantBuild: instantAppBuild,
+    setSpeed: (value) => { state.speed = value; renderControls(); return state.speed; },
+    cleanTitle: cleanTitleText
   };
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);

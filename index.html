@@ -61,7 +61,7 @@
           <span class="ai-dot is-checking" id="aiDot" aria-hidden="true"></span>
           <span class="ctl-txt" id="aiLabel">AI 확인 중</span>
         </button>
-        <button type="button" class="ctl" id="btnSpeed" title="협업 속도 조절 (1x → 2x → 4x)">
+        <button type="button" class="ctl" id="btnSpeed" title="협업 속도 조절 (1x → 2x → 4x → 즉시)">
           <svg viewBox="0 0 24 24" class="ico"><path d="M12 21a9 9 0 1 1 9-9" /><path d="M12 12l4-3" /><circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none"/></svg>
           <span id="speedLabel">1x</span>
         </button>
@@ -696,7 +696,10 @@
 
         <div class="form-foot">
           <p class="form-note">입력한 문장에서 키워드·의도·제약을 실제로 분석해 협업 내용을 만듭니다. 고정 대본이 아닙니다.</p>
-          <button type="submit" class="btn btn-primary">협업 시작</button>
+          <div class="form-actions">
+            <button type="button" class="btn btn-instant" id="btnInstantBuild" title="10턴 협업을 건너뛰고 과제에 맞는 웹앱을 바로 만듭니다">⚡ 바로 앱 생성</button>
+            <button type="submit" class="btn btn-primary">협업 시작</button>
+          </div>
         </div>
       </form>
     </div>

@@ -526,6 +526,15 @@ svg.ico { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-wi
 .field input::placeholder, .field textarea::placeholder { color: #566377; }
 .form-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 4px; flex-wrap: wrap; }
 .form-note { margin: 0; font-size: 10px; color: var(--faint); line-height: 1.55; max-width: 320px; }
+.form-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.btn-instant {
+  border: 1px solid rgba(250, 204, 21, 0.55);
+  background: linear-gradient(135deg, rgba(250, 204, 21, 0.18), rgba(94, 234, 212, 0.14));
+  color: #fde68a; font-weight: 800;
+}
+.btn-instant:hover { border-color: #facc15; color: #fff7d6; }
+:root[data-theme="light"] .btn-instant { color: #92400e; border-color: rgba(180, 83, 9, 0.45); background: linear-gradient(135deg, rgba(251, 191, 36, 0.22), rgba(13, 148, 136, 0.12)); }
+:root[data-theme="light"] .btn-instant:hover { color: #7c2d12; border-color: #b45309; }
 
 .drawer {
   width: min(760px, 100%); height: 100dvh; display: flex; flex-direction: column;
@@ -904,8 +913,8 @@ body.mode-studio .topbar-controls { display: none !important; }
 .build-pill.is-warn { color: #fecdd3; border-color: rgba(251, 113, 133, 0.35); background: rgba(251, 113, 133, 0.1); }
 .build-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 11px 18px 0; flex-wrap: wrap; flex: none; }
 .build-mission { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1 1 260px; }
-.build-mission b { font-size: 12.5px; color: #fff; letter-spacing: -0.01em; }
-.build-mission span { font-size: 10px; color: var(--faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.build-mission b { font-size: 12.5px; color: #fff; letter-spacing: -0.01em; display: block; }
+.build-mission span { font-size: 10px; color: var(--faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; }
 .build-status { margin: 9px 18px 0; font-size: 10.5px; line-height: 1.6; color: var(--muted); flex: none; }
 .build-status.is-busy { color: #fde68a; }
 .build-status.is-ok { color: #a7f3d0; }

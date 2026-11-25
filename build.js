@@ -1,4 +1,4 @@
-/* Agent Collab Studio v2.0 | 🛠️ 빌드 · 배포 패널
+/* Agent Collab Studio v2.2 | 🛠️ 빌드 · 배포 패널
  *
  *  - /api/generate-project 로 실제 프로젝트 파일 세트를 만든다(무료 AI 풀 → 로컬 Ollama → 로컬 생성기).
  *  - 파일 탐색 · 코드 편집 · 샌드박스 iframe 실시간 미리보기 · ZIP 다운로드(외부 CDN 없음).
@@ -266,7 +266,7 @@
         var sec = Math.max(1, Math.round((Date.now() - started) / 100) / 10);
         var who = data.fallback ? '로컬 생성기' : ((data.providerLabel || data.provider) + (data.model ? ' · ' + shortModel(data.model) : ''));
         setPill('생성 완료', 'ok');
-        setStatus('파일 ' + data.project.files.length + '개를 만들었습니다 — ' + who + ' · ' + sec + '초' + (data.warnings && data.warnings.length ? ' · ' + data.warnings[0] : ''), 'ok');
+        setStatus('파일 ' + data.project.files.length + '개를 만들었습니다 — ' + who + (data.project.archetypeLabel ? ' · ' + data.project.archetypeLabel : '') + ' · ' + sec + '초' + (data.warnings && data.warnings.length ? ' · ' + data.warnings[0] : ''), 'ok');
         switchBuildTab('files');
       })
       .catch(function (err) {
@@ -373,9 +373,15 @@
       meta.textContent = '협업 과제를 먼저 시작하면 그 과제와 리포트로 프로젝트를 만듭니다.';
       return;
     }
-    title.textContent = mission.title;
+    /* 제목과 목표를 한 줄에 붙여 쓰지 않는다 — b/span 을 각각 block 으로 두고, 목표는 '목표 · ' 접두어로 분리한다. */
+    var cleanTitle = String(mission.title || '').replace(/\s+/g, ' ').trim();
+    var goal = String(mission.goal || '').replace(/\s+/g, ' ').trim();
+    if (goal && cleanTitle.length > goal.length && cleanTitle.slice(-goal.length) === goal) {
+      cleanTitle = cleanTitle.slice(0, cleanTitle.length - goal.length).trim();
+    }
+    title.textContent = cleanTitle;
     var bits = [];
-    if (mission.goal) bits.push(mission.goal);
+    if (goal) bits.push('목표 · ' + goal);
     if (ctx.report) bits.push('최종 리포트 반영');
     meta.textContent = bits.join(' · ').slice(0, 180) || '과제 정보로 프로젝트를 만듭니다.';
   }
@@ -696,7 +702,8 @@
   }
 
   /* ── 열기/닫기 · 바인딩 ───────────────────────────────── */
-  function open(context) {
+  function open(context, opts) {
+    var options = opts && typeof opts === 'object' ? opts : {};
     state.context = typeof context === 'function' ? context : function () { return context || {}; };
     renderMission();
     var cfg = ghConfig();
@@ -714,6 +721,10 @@
       renderDeployDefaults();
     }
     if ($('#buildOverlay')) $('#buildOverlay').hidden = false;
+    /* ⚡ 바로 앱 생성 — 모달을 열자마자 생성까지 달린다. */
+    if (options.autostart) {
+      setTimeout(function () { try { generate(); } catch (e) {} }, 180);
+    }
   }
   function close() {
     if ($('#buildOverlay')) $('#buildOverlay').hidden = true;
