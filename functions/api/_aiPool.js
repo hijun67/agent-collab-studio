@@ -269,6 +269,7 @@ function skipProvider(provider, skip, model) {
 /** 실패 응답을 성격별로 나눈다 — 소진(quota)이면 그 프로바이더를 오늘 건너뛴다. */
 export function classifyFailure(status, text) {
   const body = String(text || "");
+  if (/timeout|timed out|after \d+ms|aborted/i.test(body)) return "timeout";
   if (
     status === 429 ||
     /4006|5016|free allocation|neurons|quota|rate.?limit|too many requests|insufficient_quota|exceeded your current|daily limit|resource_exhausted/i.test(body)

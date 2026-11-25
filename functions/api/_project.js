@@ -66,15 +66,19 @@ function slugWords(title) {
 
 /** 저장소·프로젝트 이름 규칙: 소문자·숫자·하이픈, 3~50자. */
 export function projectName(title, now) {
-  const base = slugWords(title) || "acs-project";
+  let base = slugWords(title);
+  if (!base || base.length < 3 || /^[0-9-]+$/.test(base)) base = "acs-project";
   const date = new Date(now || Date.now());
   const stamp = date.getUTCFullYear() + String(date.getUTCMonth() + 1).padStart(2, "0") + String(date.getUTCDate()).padStart(2, "0");
   const name = (base + "-" + stamp).replace(/[^a-z0-9-]/g, "").slice(0, 50);
   return name.length >= 3 ? name : "acs-project";
 }
 
-/** AI 응답(객체) → 화면·배포에 쓸 파일 세트. 쓸 수 없으면 null. */
-export function normalizeProject(value, mission, now) {
+/** AI 응답(객체) → 화면·배포에 쓸 파일 세트. 쓸 수 없으면 null.
+ *  options.partial — 단계별 생성: required 파일들이 모두 있으면 통과(index.html 강제하지 않음). */
+export function normalizeProject(value, mission, now, options) {
+  const opts = options && typeof options === "object" ? options : {};
+  const partial = opts.partial === true;
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   let raw = value.files;
   if (!Array.isArray(raw) && raw && typeof raw === "object") {
@@ -102,8 +106,13 @@ export function normalizeProject(value, mission, now) {
     if (files.length >= PROJECT_LIMITS.files) break;
   }
   if (!files.length) return null;
-  if (!seen.has("index.html")) return null;
-  if (files.length < 2) return null;
+  if (partial) {
+    const required = Array.isArray(opts.required) ? opts.required : [];
+    if (!required.every((path) => seen.has(path))) return null;
+  } else {
+    if (!seen.has("index.html")) return null;
+    if (files.length < 2) return null;
+  }
 
   const title = String(value.title || (mission && mission.title) || "생성 프로젝트").slice(0, 120);
   const summary = String(value.summary || (mission && mission.goal) || "").slice(0, 400);

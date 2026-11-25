@@ -34,8 +34,33 @@ import {
 import { parseJsonObject } from "./_collab.js";
 
 const MAX_BODY = 120 * 1024;
-const TOTAL_BUDGET = 45000;
-const PER_ATTEMPT = 16000;
+const TOTAL_BUDGET = 62000;
+const PER_ATTEMPT = 22000;
+
+/* 한 번에 4파일을 만들면 모델이 16초 안에 끝내지 못한다(실측).
+   두 단계로 나눠 각 단계의 출력을 작게 유지한다. */
+const PHASES = [
+  {
+    key: "markup",
+    files: ["index.html", "style.css"],
+    tokens: 1800,
+    ask:
+      "지금은 index.html 과 style.css 두 파일만 만드세요. index.html 은 실행 대시보드 화면(헤더·진행률·단계·체크리스트·리스크·메모)을 담고, " +
+      "style.css 를 상대경로로 연결하며 app.js 도 <script src=\"app.js\"></script> 로 연결하세요(내용은 다음 단계에서 만듭니다). " +
+      "다음 단계의 app.js 가 쓰도록 아래 id 를 index.html 에 반드시 넣으세요: " +
+      "id=\"progress\"(진행률 텍스트), id=\"progress-bar\"(진행률 막대), id=\"theme-toggle\"(테마 버튼), id=\"memo\"(메모 textarea), " +
+      "그리고 체크리스트의 각 input 에 class=\"check\" 를 붙이세요. 각 파일은 130줄 이내로 간결하게 쓰되 실제로 보기 좋은 완성 화면이어야 합니다.",
+  },
+  {
+    key: "logic",
+    files: ["app.js", "README.md"],
+    tokens: 1400,
+    ask:
+      "지금은 app.js 와 README.md 두 파일만 만드세요. app.js 는 아래에 그대로 붙은 index.html 의 id/class 만 사용해 " +
+      "체크박스(class=\"check\") 토글·진행률(#progress·#progress-bar) 계산·localStorage 저장·테마 전환(#theme-toggle)·메모 자동 저장(#memo)을 구현합니다. " +
+      "모든 요소 접근에 null 확인을 넣어, 요소가 없어도 오류로 멈추지 않게 하세요. README.md 는 프로젝트 소개·파일 목록·실행 방법·GitHub Pages/Cloudflare Pages 배포 방법을 적습니다. 각 120줄 이내.",
+  },
+];
 
 function json(data, status = 200) {
   return new Response(JSON.stringify(data), {
@@ -137,59 +162,116 @@ export async function onRequest(context) {
   const attempts = buildAttempts({ keys, skip, prefer, models, env, includeWorkersAi: true });
 
   const prompts = buildProjectPrompt(mission, report);
-  const messages = [
-    { role: "system", content: prompts.system },
-    { role: "user", content: prompts.user },
-  ];
 
-  let poolResult = { ok: false, tried: [], exhausted: [], warnings: [] };
+  const tried = [];
+  const exhausted = [];
+  const warnings = [];
+  let usedProvider = "";
+  let usedModel = "";
+  let title = "";
+  let summary = "";
+  let name = "";
+  const collected = {};
+  let failedReason = "";
+
   if (attempts.length) {
-    poolResult = await runPool({
-      attempts,
-      messages,
-      deadline: started + TOTAL_BUDGET,
-      perAttemptMs: PER_ATTEMPT,
-      maxTokens: 3800,
-      temperature: 0.5,
-      fetchImpl: typeof fetch === "function" ? fetch : null,
-      env,
-      transform: (text) => {
-        const project = normalizeProject(parseJsonObject(text), mission, Date.now());
-        return project ? { ok: true, data: project } : { ok: false, reason: "파일 세트 형식 불일치" };
-      },
-      repair: (original, text) => [
-        original[0],
-        original[1],
-        { role: "assistant", content: String(text || "").slice(0, 3000) },
-        {
-          role: "user",
-          content:
-            "위 응답이 지정한 JSON 형식이 아닙니다. 설명 없이 {\"name\",\"title\",\"summary\",\"files\":[{\"path\",\"content\"}]} 형태의 JSON 하나만 다시 출력하세요. " +
-            "files 에는 index.html, style.css, app.js, README.md 가 반드시 있어야 하고, 각 content 는 실제 동작하는 완성 코드여야 합니다.",
+    let remaining = attempts.slice();
+    for (const phase of PHASES) {
+      if (!remaining.length) break;
+      if (started + TOTAL_BUDGET - Date.now() < 6000) {
+        warnings.push("시간이 부족해 남은 단계는 로컬 생성기로 채웁니다.");
+        failedReason = "시간 초과";
+        break;
+      }
+      const phaseUser = [
+        prompts.user,
+        "",
+        "이번 단계에서 만들 파일: " + phase.files.join(", "),
+        phase.ask,
+        Object.keys(collected).length
+          ? "이미 만든 파일: " + Object.keys(collected).join(", ") + "\n앞 단계 index.html 전체:\n```html\n" +
+            String(collected["index.html"] || "").slice(0, 3500) + "\n```"
+          : "",
+        '응답은 {"name","title","summary","files":[{"path","content"}]} 형태의 JSON 하나만. files 에는 이번 단계 파일만 넣으세요.',
+      ].filter(Boolean).join("\n");
+      const messages = [
+        { role: "system", content: prompts.system },
+        { role: "user", content: phaseUser },
+      ];
+      const result = await runPool({
+        attempts: remaining,
+        messages,
+        deadline: started + TOTAL_BUDGET,
+        perAttemptMs: PER_ATTEMPT,
+        maxTokens: phase.tokens,
+        temperature: 0.45,
+        fetchImpl: typeof fetch === "function" ? fetch : null,
+        env,
+        transform: (text) => {
+          const value = parseJsonObject(text);
+          const part = normalizeProject(value, mission, Date.now(), { partial: true, required: phase.files });
+          return part ? { ok: true, data: part } : { ok: false, reason: "파일 묶음 형식 불일치" };
         },
-      ],
-    });
+        repair: (original, text) => [
+          original[0],
+          original[1],
+          { role: "assistant", content: String(text || "").slice(0, 2500) },
+          {
+            role: "user",
+            content:
+              "위 응답이 지정한 JSON 형식이 아닙니다. 설명 없이 {\"name\",\"title\",\"summary\",\"files\":[{\"path\",\"content\"}]} JSON 하나만 다시 출력하세요. " +
+              "files 에는 " + phase.files.join(", ") + " 만 넣고, content 는 실제로 동작하는 완성 코드여야 합니다.",
+          },
+        ],
+      });
+      tried.push.apply(tried, result.tried || []);
+      (result.exhausted || []).forEach((key) => { if (!exhausted.includes(key)) exhausted.push(key); });
+      (result.warnings || []).forEach((text) => warnings.push(text));
+      if (!result.ok) {
+        failedReason = "AI 응답 실패: " + (describeTried(result.tried) || result.reason || "");
+        break;
+      }
+      usedProvider = usedProvider || result.provider;
+      usedModel = usedModel || result.model;
+      const project = result.data;
+      title = title || project.title;
+      summary = summary || project.summary;
+      name = name || project.name;
+      project.files.forEach((file) => { collected[file.path] = file.content; });
+      /* 이번 단계에서 소진된 AI는 다음 단계에서 건너뛴다. */
+      const skipSet = new Set(result.exhausted || []);
+      remaining = remaining.filter((attempt) => {
+        const key = attempt.provider + ":" + attempt.model;
+        return !skipSet.has(key) && !skipSet.has(attempt.provider);
+      });
+    }
   } else {
-    poolResult.warnings.push("사용할 수 있는 AI가 없어 로컬 생성기로 프로젝트를 만들었습니다.");
+    warnings.push("사용할 수 있는 AI가 없어 로컬 생성기로 프로젝트를 만들었습니다.");
   }
 
-  if (poolResult.ok) {
+  const merged = normalizeProject(
+    { name, title, summary, files: Object.keys(collected).map((path) => ({ path, content: collected[path] })) },
+    mission,
+    Date.now(),
+    { partial: true, required: ["index.html", "style.css", "app.js", "README.md"] }
+  );
+  if (merged && usedProvider) {
     return json({
       ok: true,
-      provider: poolResult.provider,
-      providerLabel: providerLabel(poolResult.provider),
-      model: poolResult.model,
+      provider: usedProvider,
+      providerLabel: providerLabel(usedProvider),
+      model: usedModel,
       fallback: false,
-      project: poolResult.data,
-      tried: poolResult.tried,
-      exhausted: poolResult.exhausted,
-      warnings: poolResult.warnings,
+      project: merged,
+      tried,
+      exhausted,
+      warnings,
       ms: Date.now() - started,
     });
   }
 
   const project = fallbackProject(mission, report, Date.now());
-  const reason = describeTried(poolResult.tried) || poolResult.reason || "AI 미연결";
+  const reason = failedReason || describeTried(tried) || "AI 미연결";
   return json({
     ok: true,
     provider: "local",
@@ -197,9 +279,9 @@ export async function onRequest(context) {
     model: "",
     fallback: true,
     project,
-    tried: poolResult.tried,
-    exhausted: poolResult.exhausted,
-    warnings: (poolResult.warnings || []).concat([reason ? "AI 대신 로컬 생성기가 파일을 만들었습니다 — " + reason : ""]).filter(Boolean),
+    tried,
+    exhausted,
+    warnings: warnings.concat([reason ? "AI 대신 로컬 생성기가 파일을 만들었습니다 — " + reason : ""]).filter(Boolean),
     ms: Date.now() - started,
   });
 }

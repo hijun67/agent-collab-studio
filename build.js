@@ -57,8 +57,17 @@
     (files || []).forEach(function (file) { map[file.path] = file.content; });
     var html = map['index.html'];
     if (!html) return '<!DOCTYPE html><html lang="ko"><body><p>index.html 이 없습니다.</p></body></html>';
-    var base = '<base target="_blank">' +
-      '<script>(function(){try{window.localStorage.getItem("__acs");}catch(e){var m={};var s={getItem:function(k){return m[k]==null?null:m[k];},setItem:function(k,v){m[k]=String(v);},removeItem:function(k){delete m[k];},clear:function(){m={};}};try{Object.defineProperty(window,"localStorage",{configurable:true,value:s});}catch(_){}}})();<\/script>';
+    var shim = [
+      '(function(){',
+      'try{window.localStorage.getItem("__acs");}catch(e){',
+      'var m={};var s={getItem:function(k){return m[k]==null?null:m[k];},setItem:function(k,v){m[k]=String(v);},removeItem:function(k){delete m[k];},clear:function(){m={};}};',
+      'try{Object.defineProperty(window,"localStorage",{configurable:true,value:s});}catch(_){}',
+      '}',
+      'window.__acsError=function(msg){try{var d=document.getElementById("__acsErr");if(!d){d=document.createElement("div");d.id="__acsErr";d.style.cssText="position:fixed;left:12px;right:12px;bottom:12px;z-index:2147483647;background:#7f1d1d;color:#fff;font:12px/1.5 -apple-system,sans-serif;padding:10px 12px;border-radius:10px";document.body.appendChild(d);}d.textContent="미리보기 스크립트 오류: "+msg;}catch(e){}};',
+      'window.addEventListener("error",function(e){if(window.__acsError)window.__acsError((e&&e.message)||"알 수 없는 오류");});',
+      '})();'
+    ].join('');
+    var base = '<base target="_blank"><script>' + shim + '<\/script>';
     html = html.replace(/<link\b[^>]*href=["']([^"']+)["'][^>]*>/gi, function (match, href) {
       var path = String(href).replace(/^\.\//, '');
       if (/^(https?:)?\/\//.test(path) || path.indexOf('data:') === 0) return match;

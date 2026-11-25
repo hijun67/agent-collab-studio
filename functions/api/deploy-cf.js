@@ -268,12 +268,31 @@ export async function onRequest(context) {
   if (!deployment) return fail("deploy_failed", "배포를 만들지 못했습니다.", { stages });
   stages.push("배포 생성 완료");
 
+  /* 프로젝트의 실제 subdomain 을 읽는다 — 이름이 이미 전 세계에서 쓰이면 acs-demo-l31 처럼 접미사가 붙는다. */
+  let subdomain = "";
+  try {
+    const info = await cfFetch(CF_API + "/accounts/" + accountId + "/pages/projects/" + project, {
+      method: "GET",
+      headers: { authorization: "Bearer " + token },
+    });
+    const payload = await info.json().catch(() => null);
+    const result = payload && payload.result ? payload.result : null;
+    if (result) {
+      subdomain = String(result.subdomain || "").trim();
+      if (!subdomain && Array.isArray(result.domains) && result.domains.length) subdomain = String(result.domains[0] || "").trim();
+    }
+    if (subdomain) stages.push("주소 확인: " + subdomain);
+  } catch (error) {
+    /* 주소 확인은 실패해도 배포 자체는 성공 */
+  }
+
   const alias = deployment.url || (deployment.aliases && deployment.aliases[0]) || "";
   return json({
     ok: true,
     project,
     branch,
-    url: "https://" + project + ".pages.dev",
+    subdomain,
+    url: "https://" + (subdomain || (project + ".pages.dev")),
     alias,
     deploymentId: deployment.id || "",
     stages,
