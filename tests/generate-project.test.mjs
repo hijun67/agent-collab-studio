@@ -373,3 +373,13 @@ test("AI 프롬프트 — 과제 맞춤 앱을 요구하고 대시보드를 하�
   assert.equal(plan.archetype, "dashboard");
   for (const hint of Object.values(ARCHETYPE_HINTS)) assert.ok(hint.length > 10);
 });
+
+test("빌드 예산 — 프로바이더당 모델 1개로 제한해 좋은 모델이 시간을 독차지하지 않는다", () => {
+  const env = { AI: { run: async () => ({}) } };
+  const attempts = buildAttempts({ keys: {}, skip: [], prefer: "auto", env, includeWorkersAi: true, profile: "build", maxModelsPerProvider: 1 });
+  const workers = attempts.filter((a) => a.provider === "workers-ai");
+  assert.equal(workers.length, 1, "Workers AI 는 한 모델만 시도");
+  assert.match(workers[0].model, /70b/);
+  const collab = buildAttempts({ keys: {}, skip: [], prefer: "auto", env, includeWorkersAi: true, profile: "collab" });
+  assert.ok(collab.length > 1, "협업은 경량 모델을 여럿 시도");
+});

@@ -43,8 +43,8 @@ export const AI_FAIL_NOTICE =
 const MAX_BODY = 120 * 1024;
 /* 두 단계를 합쳐 50초 안에서 끝낸다. 한 번의 시도는 20초까지 주되, 남은 무료 프로바이더가 있으면
    그 몫을 남겨 두고 배분한다(_aiPool.allocateTimeout) — Workers AI 가 막혀도 Mistral 까지 간다. */
-const TOTAL_BUDGET = 50000;
-const PER_ATTEMPT = 20000;
+const TOTAL_BUDGET = 70000;
+const PER_ATTEMPT = 24000;
 
 /* 한 번에 4파일을 만들면 모델이 16초 안에 끝내지 못한다(실측).
    두 단계로 나눠 각 단계의 출력을 작게 유지한다.
@@ -65,7 +65,7 @@ function buildPhases(mission) {
     {
       key: "markup",
       files: ["index.html", "style.css"],
-      tokens: 1900,
+      tokens: 2600,
       ask:
         "지금은 index.html 과 style.css 두 파일만 만드세요. " + appStyle + " " +
         "index.html 은 앱 화면(입력·버튼·목록·결과 영역)을 담고, <h1> 에는 과제 제목만 넣으며 목표 문장은 <p class=\"lead\"> 로 따로 쓰세요. " +
@@ -78,7 +78,7 @@ function buildPhases(mission) {
     {
       key: "logic",
       files: ["app.js", "README.md"],
-      tokens: 1700,
+      tokens: 2600,
       ask:
         "지금은 app.js 와 README.md 두 파일만 만드세요. app.js 는 아래에 붙은 index.html 의 실제 id/class 만 사용해 " +
         "모든 버튼·입력을 실제 동작으로 연결하고(예: " + hint + "), 상태를 localStorage 에 저장하며 #themeBtn 로 다크/라이트 테마를 바꿉니다. " + boardLogic + " " +
@@ -187,7 +187,7 @@ export async function onRequest(context) {
   const model = clean(body.model, 80);
   const models = model && prefer !== "auto" ? { [prefer]: model } : {};
   /* 빌드는 Workers AI 의 큰 모델부터 — 협업(collab)이 경량 모델로 남겨 둔 여유를 쓴다. */
-  const attempts = buildAttempts({ keys, skip, prefer, models, env, includeWorkersAi: true, profile: "build" });
+  const attempts = buildAttempts({ keys, skip, prefer, models, env, includeWorkersAi: true, profile: "build", maxModelsPerProvider: 1 });
 
   const prompts = buildProjectPrompt(mission, report);
 

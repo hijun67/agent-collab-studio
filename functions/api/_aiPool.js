@@ -233,20 +233,20 @@ export function isSkipped(providerId, model, skip) {
  *    prefer 로 그 프로바이더를 직접 고르고 자기 키를 넣은 경우에만 시도한다.
  *  - 키가 없는 프로바이더는 건너뛴다(Workers AI 는 바인딩이 있어야 한다).
  */
-export function buildAttempts({ keys, skip, prefer, models, env, includeWorkersAi, profile }) {
+export function buildAttempts({ keys, skip, prefer, models, env, includeWorkersAi, profile, maxModelsPerProvider }) {
   const pool = new Map(keys && typeof keys === "object" ? Object.entries(keys) : []);
   const chosen = models && typeof models === "object" ? models : {};
   const preferId = String(prefer || "").toLowerCase();
   const preferDef = preferId && preferId !== "auto" ? providerById(preferId) : null;
   const mode = profile === "collab" ? "collab" : "build";
 
+  const perProviderLimit = Math.max(0, Number(maxModelsPerProvider) || 0);
   const modelList = (provider, forcedModel) => {
     const only = forcedModel || chosen[provider.id];
-    if (only) return [only];
-    if (mode === "collab" && Array.isArray(provider.collabModels) && provider.collabModels.length) {
-      return provider.collabModels;
-    }
-    return provider.models;
+    let list = only ? [only] : (mode === "collab" && Array.isArray(provider.collabModels) && provider.collabModels.length ? provider.collabModels : provider.models);
+    /* 모델을 1개로 제한하면 좋은 모델이 시간을 다 쓰지 않고 다른 프로바이더까지 도달한다(빌드 기본값). */
+    if (perProviderLimit) list = list.slice(0, perProviderLimit);
+    return list;
   };
 
   /** 자격(바인딩·키)이 있고 유료 제한을 통과해야 목록에 넣는다. */
