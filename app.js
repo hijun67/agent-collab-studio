@@ -664,7 +664,7 @@
   const STAGE_NAMES = ['미션 브리핑', '과제 분해', '심층 검증', '중간 조율', '수정 실행안', '품질 게이트', '산출물 작성', '실행 체크리스트', '최종 검증', '최종 종합'];
 
   /* ─────────── 4-0. 에이전트 카탈로그 (agents-catalog.json 원본) ───────────
-     가이드 20개 항목과 팀 투입 역할 정의는 agents-catalog.json 이 원본이고,
+     가이드 26개 항목과 팀 투입 역할 정의는 agents-catalog.json 이 원본이고,
      브라우저에서 파일 하나로도 열리도록 scripts/catalog.mjs 가 agents-catalog.js 사본을 만든다. */
   const CATALOG = (window.ACS_CATALOG && typeof window.ACS_CATALOG === 'object') ? window.ACS_CATALOG : { tools: [], roles: [], core: [] };
   const ROLES = (CATALOG.roles || []).slice();
@@ -1611,6 +1611,7 @@
   const AI_TIMEOUT = 38000;
   const AI_PROVIDERS = [
     { id: 'auto', label: '자동 · Workers AI 무료', short: '자동' },
+    { id: 'groq', label: 'Groq (본인 키)', short: 'Groq' },
     { id: 'openai', label: 'OpenAI (본인 키)', short: 'OpenAI' },
     { id: 'gemini', label: 'Google Gemini (본인 키)', short: 'Gemini' },
     { id: 'openrouter', label: 'OpenRouter (본인 키)', short: 'OpenRouter' }
@@ -2301,7 +2302,24 @@
     if (status) status.textContent = aiStatusText();
   }
 
-  function openAiDialog() {
+  /* 무료 AI 풀 입력 영역을 화면 가운데로 끌어와 잠깐 강조한다 — 모바일에서 'API 키' 버튼으로 열었을 때
+     키를 넣을 곳이 바로 보이도록. */
+  function focusPoolArea() {
+    const list = $('#poolList');
+    if (!list) return;
+    try {
+      if (typeof list.scrollIntoView === 'function') list.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    } catch (e) { /* 스크롤 미지원 환경은 무시 */ }
+    list.classList.remove('is-focus');
+    void list.offsetWidth;               /* 애니메이션을 다시 시작하려고 강제 리플로 */
+    list.classList.add('is-focus');
+    if (typeof list.focus === 'function') {
+      try { list.focus({ preventScroll: true }); } catch (e) { /* 포커스 미지원 환경은 무시 */ }
+    }
+    setTimeout(() => list.classList.remove('is-focus'), 1800);
+  }
+
+  function openAiDialog(opts) {
     if (!$('#aiOverlay')) return;
     if ($('#aiProvider')) $('#aiProvider').value = aiConfig.provider;
     if ($('#aiKey')) $('#aiKey').value = aiConfig.key;
@@ -2310,6 +2328,7 @@
     syncAiForm();
     $('#aiOverlay').hidden = false;
     probeAi();
+    if (opts && opts.focusPool) setTimeout(focusPoolArea, 80);
   }
 
   function closeAiDialog() {
@@ -3320,6 +3339,8 @@
     /* AI 설정 · BYOK */
     const btnAi = $('#btnAi');
     if (btnAi) btnAi.addEventListener('click', openAiDialog);
+    const btnApiKey = $('#btnApiKey');
+    if (btnApiKey) btnApiKey.addEventListener('click', () => openAiDialog({ focusPool: true }));
     const aiClose = $('#btnAiClose');
     if (aiClose) aiClose.addEventListener('click', closeAiDialog);
     const aiOverlay = $('#aiOverlay');

@@ -61,6 +61,7 @@
           <span class="ai-dot is-checking" id="aiDot" aria-hidden="true"></span>
           <span class="ctl-txt" id="aiLabel">AI 확인 중</span>
         </button>
+        <button type="button" class="ctl ctl-apikey" id="btnApiKey" title="API 키 수동 등록 — 무료 AI 풀과 고정 엔진 키를 여기서 넣습니다" aria-label="API 키 수동 등록 열기">🔑 API 키</button>
         <button type="button" class="ctl" id="btnSpeed" title="협업 속도 조절 (1x → 2x → 4x → 즉시)">
           <svg viewBox="0 0 24 24" class="ico"><path d="M12 21a9 9 0 1 1 9-9" /><path d="M12 12l4-3" /><circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none"/></svg>
           <span id="speedLabel">1x</span>
@@ -805,7 +806,7 @@
         <span class="pool-title">무료 AI 풀 <i>자동 로테이션</i></span>
         <span class="pool-summary" id="poolSummary">확인 중…</span>
       </div>
-      <div class="pool-list" id="poolList" aria-live="polite"></div>
+      <div class="pool-list" id="poolList" aria-live="polite" tabindex="-1"></div>
       <div class="ai-actions pool-actions">
         <button type="button" class="btn btn-sm" id="poolSave">풀 키 저장</button>
         <button type="button" class="btn btn-sm" id="poolTest">전체 연결 테스트</button>
@@ -818,6 +819,7 @@
         <label class="field" for="aiProvider"><span>AI 엔진</span>
           <select id="aiProvider">
             <option value="auto">자동 · 무료 AI 풀 (권장)</option>
+            <option value="groq">Groq (본인 키)</option>
             <option value="openai">OpenAI (본인 키)</option>
             <option value="gemini">Google Gemini (본인 키)</option>
             <option value="openrouter">OpenRouter (본인 키)</option>

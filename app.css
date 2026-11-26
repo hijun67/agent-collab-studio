@@ -582,6 +582,12 @@ svg.ico { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-wi
 /* free agent guide */
 .ctl-guide { color: #ccfbf1; border-color: rgba(94, 234, 212, 0.3); background: rgba(94, 234, 212, 0.09); }
 .ctl-guide:hover { color: #fff; border-color: rgba(94, 234, 212, 0.5); background: rgba(94, 234, 212, 0.16); }
+/* 수동 API 키 등록 — 모바일에서도 글자가 그대로 보이는 버튼 */
+.ctl-apikey {
+  gap: 4px; color: #fde68a; font-weight: 700;
+  border-color: rgba(251, 191, 36, 0.38); background: rgba(251, 191, 36, 0.12);
+}
+.ctl-apikey:hover { color: #fffbeb; border-color: rgba(251, 191, 36, 0.62); background: rgba(251, 191, 36, 0.22); }
 .empty-actions { display: flex; flex-wrap: wrap; gap: 7px; justify-content: center; }
 .guide-link {
   display: inline-flex; align-items: center; justify-content: center; gap: 6px; width: 100%;
@@ -706,6 +712,8 @@ svg.ico { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-wi
   .topbar-controls { gap: 5px; }
   .ctl, .btn { padding: 6px 8px; font-size: 11px; }
   .ctl-txt { display: none; }
+  /* .ctl-txt 로 감싸지 않은 버튼이라 390px에서도 '🔑 API 키'가 그대로 보인다. */
+  .ctl-apikey { display: inline-flex; padding: 6px 7px; font-size: 11px; }
   #btnAuto span { display: inline; }
   #btnNew .ctl-txt, #btnHistory .ctl-txt { display: none; }
   .stagebar { gap: 8px; padding: 8px 0 7px; }
@@ -862,7 +870,9 @@ body.mode-studio .topbar-controls { display: none !important; }
 .pool-title { font-size: 11.5px; font-weight: 800; color: var(--txt); letter-spacing: -0.01em; }
 .pool-title i { font-style: normal; font-size: 9px; font-weight: 700; color: #99f6e4; border: 1px solid rgba(94, 234, 212, 0.3); border-radius: 99px; padding: 1px 6px; margin-left: 5px; vertical-align: 1px; }
 .pool-summary { font-size: 10px; color: var(--faint); font-family: var(--mono); }
-.pool-list { display: flex; flex-direction: column; gap: 5px; }
+.pool-list { display: flex; flex-direction: column; gap: 5px; border-radius: 10px; transition: box-shadow .3s ease; }
+.pool-list.is-focus { box-shadow: 0 0 0 2px rgba(94, 234, 212, 0.55), 0 0 22px rgba(94, 234, 212, 0.22); }
+:root[data-theme="light"] .pool-list.is-focus { box-shadow: 0 0 0 2px rgba(15, 118, 110, 0.5), 0 0 22px rgba(13, 148, 136, 0.18); }
 .pool-row { border: 1px solid var(--line-soft); border-radius: 10px; padding: 7px 9px; background: rgba(5, 9, 16, 0.45); }
 .pool-row.is-local { border-style: dashed; }
 .pool-main { display: flex; align-items: center; gap: 7px; min-width: 0; }
@@ -1187,6 +1197,8 @@ body.mode-studio .topbar-controls { display: none !important; }
 /* 가이드 드로어 */
 :root[data-theme="light"] .ctl-guide { color: #0f766e; border-color: rgba(15, 118, 110, 0.3); background: rgba(13, 148, 136, 0.08); }
 :root[data-theme="light"] .ctl-guide:hover { color: #0b1220; border-color: rgba(15, 118, 110, 0.5); background: rgba(13, 148, 136, 0.14); }
+:root[data-theme="light"] .ctl-apikey { color: #92400e; border-color: rgba(180, 83, 9, 0.38); background: rgba(251, 191, 36, 0.18); }
+:root[data-theme="light"] .ctl-apikey:hover { color: #7c2d12; border-color: rgba(180, 83, 9, 0.58); background: rgba(251, 191, 36, 0.3); }
 :root[data-theme="light"] .guide-link { color: #0f766e; border-color: rgba(15, 118, 110, 0.32); background: rgba(13, 148, 136, 0.05); }
 :root[data-theme="light"] .guide-link:hover { color: #0b1220; background: rgba(13, 148, 136, 0.12); border-color: rgba(15, 118, 110, 0.5); }
 :root[data-theme="light"] .guide-team { background: rgba(13, 148, 136, 0.05); }

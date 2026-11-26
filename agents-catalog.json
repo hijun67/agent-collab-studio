@@ -1,7 +1,7 @@
 {
-  "version": "1.3.0",
-  "updated": "2026-11-24",
-  "note": "무료 에이전트 가이드(GUIDE) 20개 항목과 팀 투입 역할 정의. 일일 스캔은 tools 배열에 항목을 추가하고 injectable·role을 지정하면 된다. status(tone·label·note)가 있으면 카드에 상태 띠로 표시된다.",
+  "version": "2.4.0",
+  "updated": "2026-11-26",
+  "note": "무료 에이전트 가이드(GUIDE) 26개 항목과 팀 투입 역할 정의. 일일 스캔은 tools 배열에 항목을 추가하고 injectable·role을 지정하면 된다. status(tone·label·note)가 있으면 카드에 상태 띠로 표시된다.",
   "roles": [
     {
       "id": "lead",
@@ -219,12 +219,12 @@
       "en": "Antigravity",
       "free": "partial",
       "badge": "주간 무료 할당량",
-      "one": "편집기 안에서 계획·실행·검증을 나눠 돌리는 구글의 에이전트 IDE·CLI.",
-      "scope": "주간 무료 할당량 제공 · 할당량을 다 쓰면 다음 주기까지 대기",
+      "one": "편집기 안에서 계획·실행·검증을 나눠 돌리는 구글의 에이전트 IDE·CLI. 11월 30일부터 무료 플랜은 Gemini 4 Hydrogen 한 종만 쓴다.",
+      "scope": "주간 무료 할당량 제공 · 할당량을 다 쓰면 다음 주기까지 대기 · 2026-11-30부터 Free·AI Plus 플랜에서 Claude Sonnet/Opus 4.6 · GPT-OSS-120b · Gemini 4 Argon · Gemini 3.8 Flash가 빠지고 기본 모델 Gemini 4 Hydrogen만 남음(계획·실행 모두 Hydrogen, 주간 한도는 그대로)",
       "mission": {
         "title": "Antigravity 주간 할당량으로 뉴스 검색 앱 개선",
         "goal": "1주 안에 뉴스 검색 앱에 필터 1개를 추가하고 주간 무료 할당량 안에서 테스트까지 끝낸다",
-        "context": "주간 무료 할당량만 사용, 평일 저녁 하루 1시간, 예산 0원, Windows 데스크톱"
+        "context": "주간 무료 할당량만 사용, 무료 모델은 Gemini 4 Hydrogen 한 종, 평일 저녁 하루 1시간, 예산 0원, Windows 데스크톱"
       },
       "agentId": "antigravity",
       "injectable": true,
@@ -232,7 +232,8 @@
       "initial": "A",
       "color": "#c4b5fd",
       "limit": "주간 무료 할당량",
-      "role": "ide"
+      "role": "ide",
+      "source": "https://antigravity.google/docs/models"
     },
     {
       "id": "jules",
@@ -336,8 +337,8 @@
       "en": "OpenCode · MIT",
       "free": "free",
       "badge": "오픈소스 MIT",
-      "one": "터미널에서 돌리는 오픈소스 코딩 에이전트. Browse 확장을 붙이면 내 크롬 로그인 그대로 웹을 조작한다.",
-      "scope": "MIT 오픈소스 무료 · 계정 없이 무료 모델, 로컬 모델·다른 구독 연동 · Browse(크롬 확장+MCP)는 로그인된 실제 탭을 제어하고 로그인·2FA·결제만 사용자에게 넘김",
+      "one": "터미널에서 돌리는 오픈소스 코딩 에이전트. v2.4.0은 내 브라우저 로그인을 그대로 물려받고, 예약·이벤트 자동화까지 붙였다.",
+      "scope": "MIT 오픈소스 무료 · 계정 없이 무료 모델, 로컬 모델·다른 구독 연동 · v2.4.0 내장 데스크톱 브라우저가 Chrome·Edge·Firefox·Safari의 로그인·히스토리를 가져와 내가 열어 둔 탭을 그대로 읽고 조작(프로필 유지, 크로미움 확장 설치) · /automation으로 타이머·크론·MCP 이벤트에 프롬프트·스크립트·셸 명령 실행 · 로그인·2FA·결제는 사용자에게 넘김",
       "mission": {
         "title": "OpenCode + Browse로 버그 2건 고치고 화면 확인",
         "goal": "1주 안에 OpenCode로 저장소 버그 2건을 고치고 OpenCode Browse로 로그인된 화면을 직접 확인해 배포한다",
@@ -350,7 +351,7 @@
       "color": "#c4b5fd",
       "limit": "MIT 무료 · 로컬 모델",
       "role": "code",
-      "source": "https://opencode.ai/product/browse"
+      "source": "https://opencode.ai/changelog/v2.4.0"
     },
     {
       "id": "devin-desktop",
@@ -599,6 +600,144 @@
       "limit": "오픈소스 · 모델 비용 별도",
       "role": "browser",
       "source": "https://karpo.ai/blog/karpo-browser"
+    },
+    {
+      "id": "prism-agent",
+      "cat": "assistant",
+      "name": "Prism Agent",
+      "en": "Prism · Apache-2.0",
+      "free": "partial",
+      "badge": "오픈소스 · BYOK",
+      "one": "대화가 끝난 뒤에도 목표를 쫓고 정해 둔 시간에 일하는 오픈소스 개인 에이전트. 코딩은 Claude Code·Codex에 넘긴다.",
+      "scope": "Apache-2.0 오픈소스 무료 · 맥·리눅스·윈도우·컨테이너에 설치(DB 없이 런타임 하나에 에이전트·데이터) · 목표가 끝날 때까지 여러 턴 이어 실행, 평문(\"매주 평일 9시\")·크론 스케줄과 하트비트 점검, 웹훅으로 일 받기 · 명령·파일 수정, Claude Code·Codex에 코딩 위임, 웹 읽기, 내 데스크톱·브라우저 조작 · 웹 UI·터미널·Slack·Teams·음성, Google Meet 참여 · 모델은 AWS Bedrock·Microsoft Foundry·OpenAI·Anthropic·OpenRouter·자체 LiteLLM(BYOK), 도구 위험 게이트와 잠금 모드",
+      "mission": {
+        "title": "Prism Agent로 주간 점검 상주시키기",
+        "goal": "2주 안에 Prism을 VPS에 설치해 매주 월요일 9시 사이트 3곳 점검을 돌리고, 새 문제가 있을 때만 Slack으로 알림을 받는다",
+        "context": "Apache-2.0 셀프호스트, 모델은 쓰던 OpenRouter·Bedrock 키(BYOK), 하루 30분, 예산 0원(모델 사용료 별도)"
+      },
+      "agentId": "prism-agent",
+      "injectable": true,
+      "self": false,
+      "initial": "Pa",
+      "color": "#5eead4",
+      "limit": "셀프호스트 · 모델 BYOK",
+      "role": "exec",
+      "source": "https://www.mirantis.com/blog/prism-agent-is-open-source-an-ai-agent-that-keeps-working-after-the-conversation-ends/"
+    },
+    {
+      "id": "localcode",
+      "cat": "coding",
+      "name": "Localcode",
+      "en": "Localcode · Apache-2.0",
+      "free": "free",
+      "badge": "오픈소스 · Mac 로컬",
+      "one": "애플 실리콘 맥 안에서만 돌아가는 100% 로컬 자율 코딩 CLI. 파일·테스트·Git까지 스스로 확인한다.",
+      "scope": "Apache-2.0 오픈소스 무료 · Apple Silicon Mac(macOS 13+, 통합 메모리 16GB+) 전용, 클라우드 추론·API 키 없이 100% 로컬 · 12종 모델·169개 양자화 내장(Gemma 4 12B 4.7GB ~ DeepSeek V4 Flash 284B-A13B 161.9GB), RAM에 맞는 가장 큰 모델 자동 추천 · localcode 한 명령으로 파일 수정·셸 명령·테스트 실행·Git 작업·자가검증, 대화 넘어 작업 문맥 유지·앱 스캐폴딩·코드 검색 · 파일 내용·수정·실행 로그가 기기 밖으로 나가지 않음",
+      "mission": {
+        "title": "Localcode로 맥에서 오프라인 버그 수정",
+        "goal": "1주 안에 16GB 맥에 Localcode를 설치해 저장소 버그 2건을 인터넷 없이 고치고 테스트 통과까지 확인한다",
+        "context": "Apple Silicon Mac 16GB, Gemma 4 12B 로컬 모델, 하루 1시간, 예산 0원, 코드는 기기 밖으로 내보내지 않음"
+      },
+      "agentId": "localcode",
+      "injectable": true,
+      "self": false,
+      "initial": "Lc",
+      "color": "#c4b5fd",
+      "limit": "Mac 16GB+ · 모델 비용 0원",
+      "role": "code",
+      "source": "https://emergent.sh/news/localcode-ships-one-command-local-coding"
+    },
+    {
+      "id": "flashbrowse",
+      "cat": "browser",
+      "name": "flashbrowse",
+      "en": "flashbrowse · Apache-2.0",
+      "free": "free",
+      "badge": "오픈소스 · Rust",
+      "one": "순수 Rust 단일 바이너리 헤드리스 브라우저. 페이지를 접근성 트리로 압축해 에이전트가 읽는 토큰을 크게 줄인다.",
+      "scope": "Apache-2.0 오픈소스 무료 · 순수 Rust 단일 바이너리(노드·파이썬·JVM·Playwright 불필요), CLI와 MCP stdio 서버 · CDP로 Chromium 제어, DOM이 조용해지고 접근성 트리가 두 번 같아질 때까지 기다려 같은 페이지는 같은 트리 · 접근성 트리를 문서 순서로 압축(하커뉴스 2,143토큰 vs Playwright 19,269토큰), 표 셀 누락 없이 본문 100% 유지 · Claude Code·Cursor·Codex에 MCP로 연결, --session-id로 여러 단계 유지, flashbrowse doctor 진단 · 이미지·폰트·트래커 차단(스크린샷 요청 때만 이미지 재요청)",
+      "mission": {
+        "title": "flashbrowse로 뉴스 목록 MCP 붙이기",
+        "goal": "1주 안에 flashbrowse MCP를 Claude Code에 붙여 매일 보는 사이트 3곳의 새 글 제목을 토큰 한도 안에서 모아 CSV로 남긴다",
+        "context": "오픈소스 무료, Chrome 설치, 하루 30분, 예산 0원"
+      },
+      "agentId": "flashbrowse",
+      "injectable": true,
+      "self": false,
+      "initial": "Fb",
+      "color": "#60a5fa",
+      "limit": "오픈소스 · Chrome 필요",
+      "role": "browser",
+      "source": "https://dev.to/nhrdev/101-stars-building-a-pure-rust-browser-engine-for-llm-agents-f10"
+    },
+    {
+      "id": "go-bot",
+      "cat": "assistant",
+      "name": "go-bot",
+      "en": "go-bot · MIT",
+      "free": "partial",
+      "badge": "오픈소스 · 셀프호스트",
+      "one": "내 서버에 Docker로 세우는 개인 비서. 브라우저·오피스 문서·장기 메모리·예약 작업을 웹과 모바일에서 쓴다.",
+      "scope": "MIT 오픈소스 무료 · Go로 만든 셀프호스트 개인 에이전트, Docker(AMD64·ARM64)로 내 PC·서버에 설치 · 모델은 UI에서 OpenAI Responses·Anthropic Messages 호환 서비스로 지정(BYOK) · Chromium 브라우저 자동화·웹 검색, OfficeCLI로 Word·PPT·엑셀 읽기·작성·수정(완성 파일 내려받기), 이미지·영상은 Gemini API 플러그인 · 장기 메모리·대화 넘나드는 회상, 먼저 찾아보고 알려 주는 후속 제안, 예약 작업 · 대화별 실행 권한·사람 승인, 플러그인·스킬·MCP · 웹(영·중)·iOS·Android 클라이언트, Android APK 배포",
+      "mission": {
+        "title": "go-bot을 집 서버에 세우고 주간 보고 맡기기",
+        "goal": "2주 안에 go-bot을 Docker로 띄우고 매주 금요일 매출 엑셀을 정리해 PPT 한 장으로 받아 본다",
+        "context": "MIT 오픈소스, 모델은 쓰던 OpenAI·Anthropic 키(BYOK), 집 서버 Docker, 하루 30분, 예산 0원"
+      },
+      "agentId": "go-bot",
+      "injectable": true,
+      "self": false,
+      "initial": "gb",
+      "color": "#5eead4",
+      "limit": "셀프호스트 · 모델 BYOK",
+      "role": "docs",
+      "source": "https://github.com/xyc999-ai/go-bot"
+    },
+    {
+      "id": "dodaios",
+      "cat": "local",
+      "name": "Dodaios",
+      "en": "Dodaios · Apache-2.0",
+      "free": "partial",
+      "badge": "오픈소스 · 데스크톱",
+      "one": "내 컴퓨터를 에이전트로 바꾸는 오픈소스 데스크톱 앱. 화면·브라우저·터미널을 다루고 위험한 일은 먼저 묻는다.",
+      "scope": "Apache-2.0 오픈소스 무료(계정·유료 등급 없음) · Windows·macOS·Linux 데스크톱 앱, 화면 없는 서버에서는 브라우저 UI · 모델은 쓰던 구독 로그인·API 키·로컬 모델 중 선택, 채팅·음성·컴퓨터 사용·에이전트마다 다른 제공자 지정 · 화면·마우스·키보드, 브라우저, 터미널, 연결 서비스 47종 플러그인, MCP, 코딩 에이전트 연동 · 긴 작업은 백그라운드 에이전트(격리된 Git 워크트리)로 넘김, 도구 호출마다 위험 등급을 매겨 위험한 것은 승인 요청 · 채팅·메모리·설정은 내 컴퓨터에 저장(승인 게이트는 샌드박스도 되돌리기도 아님)",
+      "mission": {
+        "title": "Dodaios로 데스크톱 반복 작업 맡기기",
+        "goal": "1주 안에 Dodaios를 설치해 매달 반복하는 청구서 정리와 화면 캡처를 백그라운드 작업으로 넘기고, 위험한 단계만 직접 승인한다",
+        "context": "Apache-2.0, 쓰던 Claude 구독으로 로그인, Windows 데스크톱, 하루 30분, 예산 0원"
+      },
+      "agentId": "dodaios",
+      "injectable": true,
+      "self": false,
+      "initial": "Dd",
+      "color": "#fbbf24",
+      "limit": "셀프호스트 · 모델 BYOK",
+      "role": "local",
+      "source": "https://ainews.leverageai.com.au/case/dodaios-open-source-desktop-agent"
+    },
+    {
+      "id": "agent-first-browse",
+      "cat": "browser",
+      "name": "Agent-first-browse",
+      "en": "Agent-first-browse · Apache-2.0",
+      "free": "free",
+      "badge": "오픈소스 · delta snapshot",
+      "one": "같은 페이지를 다시 읽지 않고 바뀐 부분만 에이전트에 보내는 오픈소스 브라우저 에이전트.",
+      "scope": "Apache-2.0 오픈소스 무료 · 실제 Chromium을 제어하는 파이썬 브라우저 에이전트 · 같은 URL의 다음 단계에는 추가·변경·삭제된 요소와 짧은 요소 참조 목록만 전송(delta snapshot) — 스텝당 토큰 약 55% 절감, README 기준 35~79% · 가려진 링크 가지치기(쿠키 배너·모달 뒤 링크 제외), 페이지가 조용해질 때까지 대기, 비밀번호·OTP·PIN·카드번호 마스킹 · LangGraph 자율 실행 또는 Claude Code·Cursor·VS Code·Gemini CLI·Antigravity에 stdio MCP(7개 도구)로 연결, MCP 모드는 추가 모델 키 불필요 · 클릭 타임아웃 뒤 중복 클릭을 막는 의도 기록(intent journal)",
+      "mission": {
+        "title": "Agent-first-browse로 반복 조회 토큰 줄이기",
+        "goal": "2주 안에 Agent-first-browse를 MCP로 붙여 매일 확인하는 목록 3곳을 돌리고 스텝당 토큰을 절반으로 줄인다",
+        "context": "오픈소스 무료, Claude Code 구독으로 MCP 연결, 하루 30분, 예산 0원"
+      },
+      "agentId": "agent-first-browse",
+      "injectable": true,
+      "self": false,
+      "initial": "Af",
+      "color": "#60a5fa",
+      "limit": "오픈소스 · 모델 별도",
+      "role": "browser",
+      "source": "https://mewcp.com/articles/agent-first-browse-shows-browser-agents-only-what-changed-on-the-page-cf1c7e"
     }
   ]
 }

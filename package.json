@@ -1,6 +1,6 @@
 {
   "name": "agent-collab-studio",
-  "version": "2.3.5",
+  "version": "2.4.0",
   "private": true,
   "description": "피클·제미나이 태스크·코덱스 협업 스튜디오 — 스마트 앱 생성기(7 아키타입) + 실제 파일 생성·GitHub Pages/Cloudflare Pages 배포",
   "type": "module",
@@ -8,7 +8,7 @@
     "build": "node scripts/build.mjs",
     "check": "node scripts/catalog.mjs --check",
     "deploy": "node scripts/build.mjs && wrangler pages deploy dist --project-name agent-collab-studio --branch main",
-    "test": "node --test tests/archetypes.test.mjs"
+    "test": "node --test tests/*.test.mjs"
   },
   "engines": {
     "node": ">=18"

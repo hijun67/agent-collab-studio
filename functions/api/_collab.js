@@ -20,6 +20,11 @@ export const COLLAB_MODELS = [
 ];
 
 export const BYOK_PROVIDERS = {
+  groq: {
+    label: "Groq",
+    defaultModel: "llama-3.3-70b-versatile",
+    endpoint: "https://api.groq.com/openai/v1/chat/completions",
+  },
   openai: {
     label: "OpenAI",
     defaultModel: "gpt-4o-mini",
