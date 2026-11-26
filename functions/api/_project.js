@@ -288,6 +288,9 @@ export function buildProjectPrompt(mission, report) {
     "index.html 은 style.css 와 app.js 를 상대경로로 연결하고, app.js 는 실제 상호작용(타이머·계산·추가/삭제·검색·채점·저장 등)을 구현합니다. " +
     "상태는 localStorage 에 저장하고, 다크/라이트 테마 토글과 390px 모바일 레이아웃(가로 스크롤 없음)을 넣으세요. " +
     "모든 화면 문구는 한국어입니다. HTML 안에 <script> 태그를 문자열로 쓰지 말고 반드시 별도 app.js 파일로 분리하세요. " +
+    "레이아웃 규칙: header 는 flex 로 제목(h1)과 테마 버튼을 **한 줄**에 두고, 테마 버튼은 width:auto 인 작은 버튼이어야 합니다(전체 너비 막대·banner 금지). " +
+    "h1 이 잘리거나 다른 요소에 가려지지 않게 하고, 첫 화면에서 제목·입력 폼·목록이 모두 보이게 하세요. " +
+    "샘플 데이터가 필요하면 마감일을 오늘 기준 **미래 날짜**(예: 오늘+2일, 오늘+10일)로 넣어 D-day 배지가 보이게 합니다. " +
     "<h1> 과 <title> 에는 과제 제목만 넣고, 목표 문장은 <p class=\"lead\"> 에 따로 쓰세요. 제목과 목표를 절대 이어 붙이지 마세요.";
 
   const user = [
@@ -304,7 +307,7 @@ export function buildProjectPrompt(mission, report) {
     "요구사항:",
     "1) 결과물은 이 과제가 요구하는 **동작하는 웹앱**입니다 — " + hint + ".",
     "2) index.html: 앱 이름(h1, 과제 제목만) + 목표 한 줄(p.lead) + 실제 조작 UI(입력·버튼·목록·결과). 모든 버튼과 입력에 id 를 붙이세요.",
-    "3) style.css: 모던하고 보기 좋은 반응형 디자인, CSS 변수, 라이트/다크 테마, 390px 에서도 가로 스크롤 없음.",
+    "3) style.css: 모던하고 보기 좋은 반응형 디자인, CSS 변수, 라이트/다크 테마, 390px 에서도 가로 스크롤 없음. header 는 제목과 테마 버튼을 한 줄에 두고 테마 버튼은 작게(width:auto) — 전체 너비 막대로 만들지 마세요.",
     "4) app.js: 위 id 만 사용해 기능을 실제로 구현(이벤트 연결·계산·렌더링·localStorage 저장·테마 전환). 요소가 없어도 오류로 멈추지 않게 null 확인.",
     "5) README.md: 앱 소개, 기능 목록, 파일 목록, 실행 방법, 배포 방법(GitHub Pages / Cloudflare Pages).",
     arche.id === "dashboard"
