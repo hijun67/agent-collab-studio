@@ -1,6 +1,6 @@
 /* Agent Collab Studio v2.2 | 🛠️ 빌드 · 배포 패널
  *
- *  - /api/generate-project 로 실제 프로젝트 파일 세트를 만든다(무료 AI 풀 → 로컬 Ollama → 로컬 생성기).
+ *  - /api/generate-project 로 실제 프로젝트 파일 세트를 만든다(무료 AI 풀 → 로컬 Ollama). 실패하면 안내만.
  *  - 파일 탐색 · 코드 편집 · 샌드박스 iframe 실시간 미리보기 · ZIP 다운로드(외부 CDN 없음).
  *  - GitHub REST API 로 저장소 생성 → 모든 파일 커밋 → GitHub Pages 활성화까지 브라우저에서 직접.
  *  - /api/deploy-cf 로 Cloudflare Pages Direct Upload.
@@ -20,6 +20,8 @@
     dirty: false,
     busy: false,
     previewAt: 0,
+    previewReady: false,
+    previewTimer: null,
     context: null,
     generation: null
   };
@@ -51,39 +53,88 @@
     return d.getFullYear() + p(d.getMonth() + 1) + p(d.getDate()) + '-' + p(d.getHours()) + p(d.getMinutes());
   }
 
-  /* ── 미리보기: index.html 의 상대경로 CSS/JS 를 인라인으로 합친다 ── */
+  /* ── 미리보기: index.html 의 상대경로 CSS/JS 를 인라인으로 합친다 ──
+     v2.5.0 수정 사항
+      1) 샌드박스 iframe 은 allow-same-origin 을 넣지 않는다 — 넣으면 AI가 만든 코드가
+         이 사이트의 localStorage(GitHub·Cloudflare 토큰)를 읽을 수 있게 된다.
+         대신 localStorage 를 메모리로 대신해 주는 shim 을 **항상** 먼저 넣는다
+         (예전에는 <head> 가 없으면 shim 이 빠져 앱 스크립트가 SecurityError 로 죽고 흰 화면이 됐다).
+      2) 파일 경로를 관대하게 맞춘다(./, /, 대소문자, basename).
+      3) 인라인한 JS 안의 </script 문자열을 이스케이프해 문서 파싱이 깨지지 않게 한다.
+      4) 프레임이 스스로 렌더 결과를 부모로 알려 준다(빈 화면·스크립트 오류를 화면에 표시). */
+  var PREVIEW_SHIM = [
+    '(function(){',
+    'var KEY="__acs";',
+    'try{window.localStorage.getItem(KEY);}catch(e){',
+    'var m={};var s={getItem:function(k){return m[k]==null?null:m[k];},setItem:function(k,v){m[k]=String(v);},removeItem:function(k){delete m[k];},clear:function(){m={};},key:function(i){return Object.keys(m)[i]||null;},get length(){return Object.keys(m).length;}};',
+    'try{Object.defineProperty(window,"localStorage",{configurable:true,get:function(){return s;}});}catch(_){try{window.localStorage=s;}catch(__){}}',
+    '}',
+    'function post(kind,data){try{var d={acs:"preview",kind:kind};if(data){for(var k in data){d[k]=data[k];}}parent.postMessage(d,"*");}catch(e){}}',
+    'window.__acsError=function(msg){try{var d=document.getElementById("__acsErr");if(!d){d=document.createElement("div");d.id="__acsErr";d.style.cssText="position:fixed;left:12px;right:12px;bottom:12px;z-index:2147483647;background:#7f1d1d;color:#fff;font:12px/1.5 -apple-system,sans-serif;padding:10px 12px;border-radius:10px;white-space:pre-wrap";document.body.appendChild(d);}d.textContent="미리보기 스크립트 오류: "+msg;}catch(e){}post("error",{message:String(msg)});};',
+    'window.addEventListener("error",function(e){window.__acsError((e&&e.message)||"알 수 없는 오류");});',
+    'function measure(){try{var b=document.body||document.documentElement;var text=b?(b.innerText||""):"";var nodes=b?b.querySelectorAll("*").length:0;var h=b?b.scrollHeight:0;post("ready",{chars:text.replace(/\s+/g,"").length,nodes:nodes,height:h});}catch(e){post("error",{message:"측정 실패: "+e});}}',
+    'if(document.readyState==="loading"){document.addEventListener("DOMContentLoaded",function(){setTimeout(measure,80);});}else{setTimeout(measure,80);}',
+    'window.addEventListener("load",function(){setTimeout(measure,180);});',
+    '})();'
+  ].join('');
+
   function previewDoc(files) {
     var map = {};
-    (files || []).forEach(function (file) { map[file.path] = file.content; });
+    var lower = {};
+    (files || []).forEach(function (file) {
+      if (!file || typeof file.path !== 'string') return;
+      map[file.path] = file.content;
+      lower[file.path.toLowerCase()] = file.content;
+      var base = file.path.split('/').pop();
+      if (base && lower[base.toLowerCase()] == null) lower[base.toLowerCase()] = file.content;
+    });
     var html = map['index.html'];
-    if (!html) return '<!DOCTYPE html><html lang="ko"><body><p>index.html 이 없습니다.</p></body></html>';
-    var shim = [
-      '(function(){',
-      'try{window.localStorage.getItem("__acs");}catch(e){',
-      'var m={};var s={getItem:function(k){return m[k]==null?null:m[k];},setItem:function(k,v){m[k]=String(v);},removeItem:function(k){delete m[k];},clear:function(){m={};}};',
-      'try{Object.defineProperty(window,"localStorage",{configurable:true,value:s});}catch(_){}',
-      '}',
-      'window.__acsError=function(msg){try{var d=document.getElementById("__acsErr");if(!d){d=document.createElement("div");d.id="__acsErr";d.style.cssText="position:fixed;left:12px;right:12px;bottom:12px;z-index:2147483647;background:#7f1d1d;color:#fff;font:12px/1.5 -apple-system,sans-serif;padding:10px 12px;border-radius:10px";document.body.appendChild(d);}d.textContent="미리보기 스크립트 오류: "+msg;}catch(e){}};',
-      'window.addEventListener("error",function(e){if(window.__acsError)window.__acsError((e&&e.message)||"알 수 없는 오류");});',
-      '})();'
-    ].join('');
-    var base = '<base target="_blank"><script>' + shim + '<\/script>';
-    html = html.replace(/<link\b[^>]*href=["']([^"']+)["'][^>]*>/gi, function (match, href) {
-      var path = String(href).replace(/^\.\//, '');
-      if (/^(https?:)?\/\//.test(path) || path.indexOf('data:') === 0) return match;
-      var css = map[path];
+    if (!html) {
+      var fallback = null;
+      Object.keys(map).forEach(function (path) { if (!fallback && /\.html?$/i.test(path)) fallback = map[path]; });
+      html = fallback;
+    }
+    if (!html) return '<!DOCTYPE html><html lang="ko"><body><p style="font:13px -apple-system,sans-serif;padding:16px">index.html 이 없습니다.</p></body></html>';
+
+    var lookup = function (raw) {
+      var ref = String(raw || '').trim().replace(/^\.\//, '').replace(/^\//, '').split(/[?#]/)[0];
+      if (!ref) return null;
+      if (map[ref] != null) return map[ref];
+      if (lower[ref.toLowerCase()] != null) return lower[ref.toLowerCase()];
+      var base = ref.split('/').pop();
+      if (base && lower[base.toLowerCase()] != null) return lower[base.toLowerCase()];
+      return null;
+    };
+    var inlineScript = function (js) {
+      /* 인라인 스크립트 안의 </script 는 문서 파싱을 끊는다 — 문자열·정규식 모두 안전한 형태로 바꾼다. */
+      return String(js).replace(/<\/script/gi, '<\\/script');
+    };
+
+    var doc = html.replace(/<link\b[^>]*href=["']([^"']+)["'][^>]*>/gi, function (match, href) {
+      if (/^(https?:)?\/\//i.test(href) || href.indexOf('data:') === 0) return match;
+      var css = lookup(href);
       if (css == null) return match;
-      return '<style data-from="' + esc(path) + '">\n' + css + '\n</style>';
+      return '<style data-from="' + esc(href) + '">\n' + String(css).replace(/<\/style/gi, '<\\/style') + '\n</style>';
     });
-    html = html.replace(/<script\b[^>]*src=["']([^"']+)["'][^>]*>\s*<\/script>/gi, function (match, src) {
-      var path = String(src).replace(/^\.\//, '');
-      if (/^(https?:)?\/\//.test(path)) return match;
-      var js = map[path];
+    doc = doc.replace(/<script\b([^>]*)\bsrc=["']([^"']+)["']([^>]*)>\s*<\/script>/gi, function (match, pre, src, post) {
+      if (/^(https?:)?\/\//i.test(src)) return match;
+      var js = lookup(src);
       if (js == null) return match;
-      return '<script data-from="' + esc(path) + '">\n' + js + '\n</script>';
+      var attrs = (pre + ' ' + post).replace(/\s+/g, ' ');
+      var type = /type=["']module["']/i.test(attrs) ? ' type="module"' : '';
+      return '<script' + type + ' data-from="' + esc(src) + '">\n' + inlineScript(js) + '\n</script>';
     });
-    if (/<head[^>]*>/i.test(html)) html = html.replace(/<head([^>]*)>/i, '<head$1>' + base);
-    return html;
+
+    var base = '<base target="_blank">';
+    var shim = '<script data-acs-shim="1">' + PREVIEW_SHIM + '<\/script>';
+    if (/<head[^>]*>/i.test(doc)) {
+      doc = doc.replace(/<head([^>]*)>/i, '<head$1><meta charset="utf-8" />' + base + shim);
+    } else if (/<html[^>]*>/i.test(doc)) {
+      doc = doc.replace(/<html([^>]*)>/i, '<html$1><head><meta charset="utf-8" />' + base + shim + '</head>');
+    } else {
+      doc = '<!DOCTYPE html><html lang="ko"><head><meta charset="utf-8" />' + base + shim + '</head><body>' + doc + '</body></html>';
+    }
+    return doc;
   }
 
   /* ── ZIP (store 방식 · CRC32 · UTF-8 파일명) ── */
@@ -250,28 +301,42 @@
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(body)
     })
-      .then(function (res) { return res.json().catch(function () { return null; }); })
-      .then(function (data) {
-        if (!data || !data.ok || !data.project) {
-          throw new Error((data && data.message) || '프로젝트를 만들지 못했습니다.');
-        }
-        if (data.exhausted && window.__ACS && window.__ACS.ai && window.__ACS.ai.markExhausted) {
+      .then(function (res) {
+        return res.json().catch(function () { return null; }).then(function (data) {
+          return { status: res.status, data: data };
+        });
+      })
+      .then(function (out) {
+        var data = out && out.data;
+        if (data && Array.isArray(data.exhausted) && data.exhausted.length && window.__ACS && window.__ACS.ai && window.__ACS.ai.markExhausted) {
           try { window.__ACS.ai.markExhausted(data.exhausted); } catch (e) {}
         }
-        if (data.fallback) return tryOllama(body).then(function (ollama) { return ollama || data; });
-        return data;
+        if (data && data.ok && data.project) return data;
+        /* 서버 AI 가 모두 실패하면, 사용자가 켜 둔 로컬 Ollama(실제 모델)를 한 번 더 시도한다. */
+        return tryOllama(body).then(function (ollama) {
+          if (ollama) return ollama;
+          var message = (data && data.message) || '';
+          if (!message) message = out && out.status === 429
+            ? '무료 AI 한도가 모두 소진되었습니다 (429).'
+            : 'AI가 프로젝트를 만들지 못했습니다 (' + (out ? out.status : 'network') + ').';
+          var detail = data && data.detail ? ' — ' + data.detail : '';
+          throw new Error(message + detail);
+        });
       })
       .then(function (data) {
         applyProject(data.project);
         var sec = Math.max(1, Math.round((Date.now() - started) / 100) / 10);
-        var who = data.fallback ? '로컬 생성기' : ((data.providerLabel || data.provider) + (data.model ? ' · ' + shortModel(data.model) : ''));
+        var who = (data.providerLabel || data.provider || 'AI') + (data.model ? ' · ' + shortModel(data.model) : '');
         setPill('생성 완료', 'ok');
         setStatus('파일 ' + data.project.files.length + '개를 만들었습니다 — ' + who + (data.project.archetypeLabel ? ' · ' + data.project.archetypeLabel : '') + ' · ' + sec + '초' + (data.warnings && data.warnings.length ? ' · ' + data.warnings[0] : ''), 'ok');
         switchBuildTab('files');
       })
       .catch(function (err) {
         setPill('실패', 'warn');
-        setStatus('프로젝트를 만들지 못했습니다 — ' + String((err && err.message) || err), 'warn');
+        setStatus(String((err && err.message) || err), 'warn');
+        if (window.__ACS && window.__ACS.ai && typeof window.__ACS.ai.reportFail === 'function') {
+          try { window.__ACS.ai.reportFail(String((err && err.message) || err)); } catch (e) {}
+        }
       })
       .then(function () {
         state.busy = false;
@@ -450,7 +515,7 @@
     if ($('#buildDirty')) $('#buildDirty').textContent = '';
     if ($('#buildPreviewMeta')) {
       $('#buildPreviewMeta').textContent = state.project
-        ? state.project.files.length + '개 파일 · ' + (state.project.source === 'local' ? '로컬 생성' : state.project.source || 'AI 생성')
+        ? state.project.files.length + '개 파일 · ' + (state.project.source === 'ai' ? 'AI 생성' : 'AI 생성')
         : '';
     }
   }
@@ -466,11 +531,26 @@
     renderTree();
   }
 
+  function setPreviewNote(text, tone) {
+    var el = $('#buildPreviewNote');
+    if (!el) return;
+    el.textContent = text || '';
+    el.className = 'build-preview-note' + (tone ? ' is-' + tone : '');
+  }
+
   function renderPreview() {
     var frame = $('#buildPreviewFrame');
     if (!frame || !state.project) return;
-    frame.srcdoc = previewDoc(state.project.files);
     state.previewAt = Date.now();
+    state.previewReady = false;
+    setPreviewNote('미리보기를 그리는 중…', '');
+    frame.srcdoc = previewDoc(state.project.files);
+    /* 프레임이 렌더 결과를 알려 오지 않으면(스크립트가 죽었거나 빈 문서) 화면에 그대로 표시한다. */
+    clearTimeout(state.previewTimer);
+    state.previewTimer = setTimeout(function () {
+      if (state.previewReady) return;
+      setPreviewNote('미리보기에서 렌더 신호가 오지 않았습니다 — 새로고침을 누르거나 코드의 스크립트 오류를 확인하세요.', 'warn');
+    }, 3000);
   }
 
   function renderDeployDefaults() {
@@ -749,8 +829,30 @@
     return !!($('#buildOverlay') && !$('#buildOverlay').hidden);
   }
 
+  function onPreviewMessage(e) {
+    var frame = $('#buildPreviewFrame');
+    var data = e && e.data;
+    if (!frame || !data || data.acs !== 'preview' || e.source !== frame.contentWindow) return;
+    if (data.kind === 'ready') {
+      state.previewReady = true;
+      clearTimeout(state.previewTimer);
+      var chars = Number(data.chars) || 0;
+      var nodes = Number(data.nodes) || 0;
+      if (chars === 0 && nodes < 3) {
+        setPreviewNote('미리보기가 거의 비어 있습니다 — 생성된 index.html 에 화면 요소가 있는지 확인하세요.', 'warn');
+      } else {
+        setPreviewNote('렌더 확인 — 텍스트 ' + chars + '자 · 요소 ' + nodes + '개', 'ok');
+      }
+    } else if (data.kind === 'error') {
+      state.previewReady = true;
+      clearTimeout(state.previewTimer);
+      setPreviewNote('미리보기 스크립트 오류: ' + String(data.message || '').slice(0, 160), 'warn');
+    }
+  }
+
   function bind() {
     if (!$('#buildOverlay')) return;
+    window.addEventListener('message', onPreviewMessage);
     $('#btnBuildClose').addEventListener('click', close);
     $('#buildOverlay').addEventListener('click', function (e) { if (e.target === $('#buildOverlay')) close(); });
     $('#btnBuildGenerate').addEventListener('click', generate);

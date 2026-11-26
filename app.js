@@ -892,158 +892,56 @@
     return '<ul class="bullets' + (cls ? ' ' + cls : '') + '">' + items.map((i) => '<li>' + i + '</li>').join('') + '</ul>';
   }
 
-  function buildTurn(stage, p, fresh) {
-    const a = {
-      pickle: (tag, html, extra) => Object.assign({ stage, agent: 'pickle', tag, html, tasks: [], artifacts: [] }, extra || {}),
-      gemini: (tag, html, extra) => Object.assign({ stage, agent: 'gemini', tag, html, tasks: [], artifacts: [] }, extra || {}),
-      codex: (tag, html, extra) => Object.assign({ stage, agent: 'codex', tag, html, tasks: [], artifacts: [] }, extra || {})
+  /* ─────── 4-1. 턴 큐 — 누가·언제 말하는지만 정한다 (내용은 AI가 쓴다) ───────
+     v2.5.0 — 결정론적 발언 생성기(buildTurn·buildExtraTurn)와 로컬 협업 엔진을 폐기했다.
+     여기서는 '몇 단계에서 누가 말하고 어떤 태스크를 옮기는지'만 정하고,
+     발언 본문·산출물은 /api/collab 의 실제 AI 응답(aiTurn)으로만 채운다. */
+  const STAGE_AGENT = [
+    { agent: 'pickle', tag: '목표 정의' },
+    { agent: 'gemini', tag: '과제 분해' },
+    { agent: 'codex', tag: '심층 검증' },
+    { agent: 'pickle', tag: '중간 조율' },
+    { agent: 'gemini', tag: '수정 실행안' },
+    { agent: 'codex', tag: '품질 게이트' },
+    { agent: 'pickle', tag: '산출물 작성' },
+    { agent: 'gemini', tag: '실행 체크리스트' },
+    { agent: 'codex', tag: '최종 검증' },
+    { agent: 'pickle', tag: '최종 종합' }
+  ];
+  const STAGE_TASKS = {
+    1: [['T1', 'in_progress']],
+    2: [['T1', 'done'], ['T2', 'in_progress']],
+    3: [['T2', 'review'], ['T3', 'in_progress']],
+    4: [['T2', 'review'], ['T3', 'in_progress'], ['T4', 'in_progress']],
+    5: [['T2', 'done']],
+    6: [['T3', 'done'], ['T5', 'in_progress']],
+    7: [['T4', 'done'], ['T6', 'in_progress']],
+    8: [],
+    9: [['T5', 'done']],
+    10: [['T6', 'done']]
+  };
+  const STAGE_ARTIFACT = {
+    2: '실행 단계 초안',
+    5: '수정 실행 체크리스트',
+    7: '실행 브리프',
+    8: '첫 3일 실행표'
+  };
+
+  function taskOps(stage) {
+    return (STAGE_TASKS[stage] || []).map((pair) => ({ id: pair[0], status: pair[1] }));
+  }
+
+  function turnShell(stage) {
+    const def = STAGE_AGENT[clamp(stage, 1, TURN_TOTAL) - 1] || STAGE_AGENT[0];
+    return {
+      stage: stage,
+      agent: def.agent,
+      tag: def.tag,
+      html: '',
+      tasks: taskOps(stage),
+      artifacts: [],
+      artifactTitle: STAGE_ARTIFACT[stage] || ''
     };
-    const k = p.keywords;
-    const when = p.deadline ? p.deadline.label : '정한 기간';
-    const fb = fbBlock(fresh);
-
-    if (stage === 1) {
-      const html = fb +
-        '<p>과제 <b>"' + esc(p.title) + '"</b>' + josa(p.title, '을') + ' 시작합니다. 제가 총괄하고, <span class="mention">@제미나이 태스크</span>가 실행 구조를, <span class="mention">@코덱스</span>가 논리와 리스크를 맡습니다.</p>' +
-        (extrasOf(state.extras).length ? '<p>가이드에서 데려온 <b>' + extrasOf(state.extras).map((a) => esc(a.name) + '(' + esc(a.roleKo) + ')').join(', ') + '</b>도 함께합니다 — 각자 맡은 역할에서 발언하고 태스크를 하나씩 가져갑니다.</p>' : '') +
-        '<p>제가 읽은 과제는 <b>' + esc(p.domainLabel) + ' · ' + esc(p.intentLabel) + '</b> 유형이고, 핵심어는 ' + k.slice(0, 3).map((x) => '<b>' + esc(x) + '</b>').join(', ') + '입니다. 목표는 이렇게 이해했습니다 — ' + esc(p.goalShort) + '</p>' +
-        (p.constraints.length ? bullets(p.constraints.slice(0, 4).map((c) => '<b>' + esc(c.label) + '</b>')) : '') +
-        '<p><b>성공 기준 3개</b>입니다. 이 셋만 보겠습니다.</p>' +
-        bullets(p.criteria.map((c) => esc(c)), 'num-list') +
-        '<div class="callout"><b>작업 규칙</b> 협업 중 지시를 넣으면 다음 턴부터 바로 반영합니다. &lsquo;자동 진행&rsquo;을 멈추고 &lsquo;다음 턴&rsquo;으로 한 단계씩 볼 수도 있습니다.</div>';
-      return a.pickle('목표 정의', html, { tasks: [{ id: 'T1', status: 'in_progress' }] });
-    }
-
-    if (stage === 2) {
-      const html = fb +
-        '<p>' + (scopeWord(p) ? esc(scopeWord(p)) + ' ' : '') + '"' + esc(k[0] || '핵심 결과') + '"' + josa(k[0] || '핵심', '을') + ' 기준으로 5단계로 쪼갰습니다. ' + esc(scheduleLine(p)) + '</p>' +
-        bullets(p.steps.map((s) => '<b>' + esc(s.name) + '</b> <span class="sub-note">· ' + esc(s.when) + ' · ' + esc(s.owner) + '</span><br>' + s.detail + '<br><span class="sub-note">산출물: ' + esc(s.output) + '</span>'), 'num-list') +
-        '<p><b>필요한 리소스</b></p>' + bullets(p.resources.map((r) => esc(r))) +
-        '<p><b>먼저 확인할 것</b> — 계획을 세우기 전에 사실로 확인해야 하는 항목입니다.</p>' + bullets(p.research.slice(0, 2).map((r) => esc(r))) +
-        '<div class="callout"><b>오늘의 첫 30분</b> ' + esc(p.steps[0].detail) + '</div>';
-      return a.gemini('과제 분해', html, {
-        tasks: [{ id: 'T1', status: 'done' }, { id: 'T2', status: 'in_progress' }],
-        artifacts: [{ title: '실행 단계 초안 (' + dateLabel() + ')', content: stepOutlineMd(p) }]
-      });
-    }
-
-    if (stage === 3) {
-      const altA = 'A안 — 좁고 빠르게: ' + esc(p.steps[0].name) + ' → ' + esc(p.steps[1].name) + '만 ' + esc(when) + ' 안에 끝내고, ' + esc(p.steps[3].name) + josa(p.steps[3].name, '은') + ' 다음 판으로 넘깁니다.';
-      const altB = 'B안 — 넓고 완성도: 5단계를 모두 유지하되 ' + (p.deadline ? esc(p.deadline.label) + josa(p.deadline.label, '을') + ' 1.5배로 늘리거나' : '기간을 1.5배로 잡거나') + ' 하루 가용 시간을 2배로 확보합니다.';
-      const rec = p.plan === 'A'
-        ? 'A안을 권합니다. 기간이 짧을수록 단계 수를 줄이는 쪽이 완주율이 높습니다.'
-        : 'B안을 권합니다. 다만 2단계 산출물이 나오기 전에는 3단계를 시작하지 않는 조건을 붙이세요.';
-      const html = fb +
-        '<p>계획을 그대로 두면 위험한 지점부터 짚겠습니다. 네 가지입니다.</p>' +
-        bullets(p.critique.map((c) => '<b>' + esc(c.t) + '</b><br>' + esc(c.d)) , 'num-list') +
-        '<p><b>대안 시나리오</b></p>' + bullets([altA, altB]) +
-        '<p><b>품질 검증 기준</b> — 결과물을 볼 때 이 셋을 먼저 봅니다.</p>' + bullets(p.quality.map((q) => esc(q))) +
-        '<div class="callout"><b>판단</b> ' + rec + ' 지시가 없으면 ' + p.plan + '안을 기본값으로 두고 진행합니다.</div>';
-      return a.codex('심층 검증', html, { tasks: [{ id: 'T2', status: 'review' }, { id: 'T3', status: 'in_progress' }] });
-    }
-
-    if (stage === 4) {
-      const html = fb +
-        '<p>두 사람의 결과를 합쳐 결정 세 개를 내렸습니다.</p>' +
-        bullets([
-          '<b>채택</b> — 제미나이 태스크의 5단계 중 1·2단계를 이번 주에 먼저 실행합니다. 첫 산출물은 "' + esc(p.steps[0].output) + '"입니다.',
-          '<b>수정</b> — 코덱스가 지적한 "' + esc(p.critique[0].t) + '" 항목을 반영해, 성공 기준에 측정값 한 개를 추가했습니다.',
-          '<b>보류</b> — "' + esc(p.steps[4].name) + '"' + josa(p.steps[4].name, '은') + ' 결과물이 나온 뒤로 미룹니다.'
-        ], 'num-list') +
-        '<p>태스크 보드는 T2 검토, T3 진행, T4 착수로 옮겼습니다. 제미나이 태스크는 수정 실행안을, 코덱스는 품질 게이트를 이어서 준비해 주세요.</p>' +
-        '<div class="callout"><b>지금 판단이 필요한 지점</b> A안(좁고 빠르게)과 B안(넓고 완성도) 중 어디로 갈지입니다. 지시가 없으면 <b>' + p.plan + '안</b>으로 계속합니다.</div>';
-      return a.pickle('중간 조율', html, { tasks: [{ id: 'T2', status: 'review' }, { id: 'T3', status: 'in_progress' }, { id: 'T4', status: 'in_progress' }] });
-    }
-
-    if (stage === 5) {
-      const items = p.steps.map((s, i) => '<b>' + esc(s.name) + '</b> — ' + esc(timeBox(p, [0.08, 0.2, 0.32, 0.24, 0.16][i])) + ' · ' + esc(s.when) + '<br>' + s.detail);
-      const html = fb +
-        '<p>코덱스 지적을 반영해 순서를 다시 짰습니다. ' + esc(when) + ' 안에 끝나도록 시간 상자를 먼저 잡고, 그 안에 맞지 않는 일은 잘라냈습니다.</p>' +
-        bullets(items, 'num-list') +
-        '<p><b>리소스 확정</b> ' + p.resources.map((r) => esc(r)).join(' · ') + '</p>' +
-        '<p><b>이번 판 약속</b> "' + esc(p.checks[0]) + '"까지가 완료 조건입니다. 나머지는 다음 판으로 넘깁니다.</p>' +
-        '<div class="callout"><b>검증 지표</b> ' + p.kpis.slice(0, 2).map((x) => esc(x)).join(', ') + ' — 이 두 개만 봅니다.</div>';
-      return a.gemini('수정 실행안', html, {
-        tasks: [{ id: 'T2', status: 'done' }],
-        artifacts: [{ title: '수정 실행 체크리스트', content: checklistMd(p) }]
-      });
-    }
-
-    if (stage === 6) {
-      const gates = p.kpis.slice(0, 3).map((kpi, i) => '<b>' + esc(kpi) + '</b> — 측정: ' + esc(measureMethod(kpi, p, i)) + '<br>기준 미달 시: ' + esc(failAction(i, p))).join('</li><li>');
-      const html = fb +
-        '<p>측정하지 않는 계획은 계획이 아닙니다. 결과물을 판정할 게이트 세 개를 확정합니다.</p>' +
-        '<ol class="bullets num-list"><li>' + gates + '</li></ol>' +
-        '<p><b>반증 조건</b> 아래 신호가 하나라도 보이면 계획을 접고 A안으로 후퇴합니다.</p>' +
-        bullets([
-          esc(p.steps[1].when) + '까지 "' + esc(p.steps[1].output) + '"' + josa(p.steps[1].output, '이') + ' 나오지 않는다',
-          '핵심 지표가 기준선보다 나빠진다',
-          '같은 원인의 오류·지연이 두 번 반복된다'
-        ]) +
-        '<p><b>남는 리스크</b> ' + esc(p.risks[0].r) + ' — 대응은 ' + esc(p.risks[0].m) + '. 완전히 없애지는 못했으니 계속 봅니다.</p>' +
-        '<div class="callout"><b>품질 기준</b> ' + p.quality.map((q) => esc(q)).join(' / ') + '</div>';
-      return a.codex('품질 게이트', html, { tasks: [{ id: 'T3', status: 'done' }, { id: 'T5', status: 'in_progress' }] });
-    }
-
-    if (stage === 7) {
-      const brief = briefMd(p);
-      const html = fb +
-        '<p>지금까지 합의를 실행 브리프 한 장으로 묶었습니다. 범위·일정·체크리스트가 같은 문서에 있어야 실행할 때 흔들리지 않습니다.</p>' +
-        bullets([
-          '<b>범위</b> — ' + esc(p.deliverable) + '까지. ' + esc(p.steps[3].name) + josa(p.steps[3].name, '은') + ' 다음 판.',
-          '<b>일정</b> — ' + esc(p.steps.map((s) => s.when).join(' · ')),
-          '<b>완료 조건</b> — ' + esc(p.checks[0])
-        ]) +
-        '<p>산출물 패널에 <b>실행 브리프</b>를 올렸습니다. 복사해서 그대로 쓸 수 있습니다.</p>' +
-        '<div class="callout"><b>다음</b> 제미나이 태스크가 첫 3일 실행표를, 코덱스가 최종 검증을 맡습니다.</div>';
-      return a.pickle('산출물 작성', html, {
-        tasks: [{ id: 'T4', status: 'done' }, { id: 'T6', status: 'in_progress' }],
-        artifacts: [{ title: '실행 브리프', content: brief }]
-      });
-    }
-
-    if (stage === 8) {
-      const days = firstThreeDays(p);
-      const html = fb +
-        '<p>바로 손이 움직이도록 첫 3일을 시간 단위로 잘랐습니다. ' + (p.deadline ? esc(p.deadline.label) : '2주') + ' 계획의 출발점입니다.</p>' +
-        bullets(days.map((d) => '<b>' + esc(d.label) + '</b> — ' + esc(d.text) + '<br><span class="sub-note">완료 판단: ' + esc(d.done) + '</span>'), 'num-list') +
-        '<p><b>루틴 고정</b> ' + esc(routineAdvice(p)) + '</p>' +
-        '<p><b>도구 준비</b> ' + p.resources.map((r) => esc(r)).join(' · ') + '</p>' +
-        '<div class="callout"><b>막히면</b> 30분 이상 진전이 없으면 범위를 더 자르고 피클에게 다시 조율을 요청하세요.</div>';
-      return a.gemini('실행 체크리스트', html, {
-        artifacts: [{ title: '첫 3일 실행표', content: firstDaysMd(p) }]
-      });
-    }
-
-    if (stage === 9) {
-      const html = fb +
-        '<p>최종 검증입니다. 계획이 아니라 결과물을 봅니다.</p>' +
-        bullets([
-          '<b>품질 게이트</b> — ' + p.quality.map((q) => esc(q)).join(' / ') + '. 셋 다 통과해야 완료입니다.',
-          '<b>남은 리스크</b> — ' + esc(p.risks[1] ? p.risks[1].r : p.risks[0].r) + ' (대응: ' + esc(p.risks[1] ? p.risks[1].m : p.risks[0].m) + ')',
-          '<b>재검토 트리거</b> — ' + esc(p.steps[2].when) + '에 중간 점검, 지표가 기준선보다 나쁘면 즉시 A안으로 후퇴.'
-        ], 'num-list') +
-        '<p>지표 측정은 결과물을 만든 사람이 아니라 <b>다른 사람</b>이 한 번 해 보는 방식이 가장 정확합니다. ' + esc(p.audience) + ' 한 명에게 부탁하세요.</p>' +
-        '<div class="callout"><b>코덱스 판정</b> 계획으로서는 통과입니다. 실행에서 무너질 지점은 일정이 아니라 범위이므로, 추가 요구가 들어오면 이번 판에서는 거절하는 규칙을 유지하세요.</div>';
-      return a.codex('최종 검증', html, { tasks: [{ id: 'T5', status: 'done' }] });
-    }
-
-    const report = buildReportData(p);
-    const html = fb +
-      '<p>10단계 동안 태스크 ' + state.tasks.length + '개를 모두 마쳤습니다' + (extrasOf(state.extras).length ? ' — 투입한 ' + extrasOf(state.extras).length + '명도 자기 몫을 가져갔습니다' : '') + '. 마지막으로 결과를 하나로 묶었습니다.</p>' +
-      bullets([
-        '<b>과제 요약</b> — ' + esc(cut(p.goal, 110)),
-        '<b>실행 로드맵</b> — 5단계, ' + esc(p.steps[0].when) + '부터 ' + esc(p.steps[4].when) + '까지',
-        '<b>리스크</b> — ' + esc(p.risks[0].r) + ' 외 ' + Math.max(0, p.risks.length - 1) + '건과 대응책',
-        '<b>체크리스트</b> — 바로 실행할 ' + p.checks.length + '개 항목'
-      ]) +
-      '<p><b>최종 결과물이 준비됐습니다.</b> 오른쪽 &lsquo;지표&rsquo; 탭이나 아래 버튼에서 열어 Markdown 복사, .md 저장, .html 보고서 저장을 할 수 있습니다.</p>' +
-      '<div class="callout"><b>피클의 마지막 판단</b> 이 계획의 성패는 ' + esc(p.steps[0].name) + '에서 갈립니다. 첫 30분 안에 "' + esc(p.steps[0].output) + '"' + josa(p.steps[0].output, '을') + ' 만들지 못하면 범위를 다시 줄이세요.</div>';
-    return a.pickle('최종 종합', html, {
-      tasks: [{ id: 'T6', status: 'done' }],
-      artifacts: [{ title: '최종 결과물 리포트', content: report.md }],
-      report: report
-    });
   }
 
   /* ─────── 4-2. 투입 에이전트의 역할 발언 (고정 3인 뒤에 붙는다) ─────── */
@@ -1052,299 +950,37 @@
     return t ? t.id : null;
   }
 
-  function extraTurnDef(def) {
-    const are = { stage: 0, agent: def.id, tag: def.roleKo, html: '', tasks: [], artifacts: [] };
-    return are;
-  }
-
-  function buildExtraTurn(def, stage, p) {
-    const role = roleById(def.roleId);
-    const stages = role && role.stages && role.stages.length ? role.stages : [2, 6];
-    const first = stage === stages[0];
-    const label = def.roleKo;
-    const limit = def.tool ? (def.tool.limit || def.tool.badge || '무료 범위') : '무료 범위';
-    const step0 = p.steps[0] || { name: '1단계', output: '첫 결과물' };
-    const step1 = p.steps[1] || step0;
+  function extraTurnShell(def, stage, first) {
     const taskId = extraTaskId(def);
-    const taskOps = stage === 1 || !taskId ? [] : [{ id: taskId, status: first ? 'in_progress' : 'done' }];
-    const turn = extraTurnDef(def);
-    Object.assign(turn, { stage: stage, tasks: taskOps });
-    const head = '<p>저는 <b>' + esc(label) + '</b>' + josa(label, '을') + ' 맡았습니다.</p>';
-    const headLater = '<p><b>' + esc(label) + '</b> 관점에서 다시 봤습니다.</p>';
-    const who = p.audience || '사용자';
-    const out = [];
-    let html = '';
-
-    if (stage === 1) {
-      const myOut = role ? role.output : label;
-      html = '<p><b>' + esc(label) + '</b>' + josa(label, '으로') + ' 합류했습니다. 먼저 <b>' + esc(step0.name) + '</b>' + josa(step0.name, '을') + ' 보고, 제 몫인 <b>' + esc(myOut) + '</b>' + josa(myOut, '을') + ' 넘기겠습니다.</p>';
-      turn.html = html;
-      return turn;
-    }
-
-    if (def.roleId === 'code') {
-      if (first) {
-        html = head +
-          '<p>"' + esc(p.title) + '"에서 <b>' + esc(step0.name) + '</b>' + josa(step0.name, '을') + ' PR 3개로 나누겠습니다.</p>' +
-          bullets([
-            '<b>PR 1</b> — ' + esc(step0.output) + ' 뼈대와 실행 확인',
-            '<b>PR 2</b> — 핵심 로직과 예외 처리 (' + esc(step1.name) + ' 준비)',
-            '<b>PR 3</b> — 테스트와 사용 설명'
-          ], 'num-list') +
-          '<p>PR은 하나에 300줄 아래, 브랜치는 PR 하나당 하나만 열어 두겠습니다. 한도 <b>' + esc(limit) + '</b> 안에서 움직이려고 하루 두 사이클로 나뒀습니다.</p>' +
-          '<div class="callout"><b>리뷰 규칙</b> @코덱스 품질 기준을 제가 먼저 셀프 체크하고, 통과한 PR만 넘깁니다. 막힌 건 바로 @피클에게 올립니다.</div>';
-        out.push({
-          title: 'PR 계획 (' + def.name + ')',
-          content: ['# PR 계획 — ' + p.title, '', '- 역할: ' + label + ' (' + def.name + ', 한도 ' + limit + ')', '- 목표: ' + p.goal, '', '## PR 3건',
-            '1. ' + step0.output + ' 뼈대와 실행 확인', '2. 핵심 로직과 예외 처리 (' + step1.name + ' 준비)', '3. 테스트와 사용 설명', '',
-            '## 완료 판단', '- ' + p.checks[0], '- PR 3건 모두 셀프 체크 후 제출'].join('\n')
-        });
-      } else {
-        const crit = p.critique[0] ? p.critique[0].t : '리스크 점검';
-        html = headLater +
-          '<p>수정 실행안을 코드로 옮길 순서를 확정했습니다. 코덱스가 짚은 항목은 문서가 아니라 실행 절차로 막습니다 — <b>' + esc(crit) + '</b>.</p>' +
-          bullets([
-            '실행 환경 먼저 맞추기 — 의존성 설치부터 다시(오류가 나면 여기서 멈춤)',
-            '<b>' + esc(step0.name) + '</b> 변경을 PR 1로 올리고 실행 로그첨부',
-            '통과하면 PR 2·3을 연속해서 올리고, 실패한 검사는 고치지 않고 목록만 남기기'
-          ]) +
-          '<p>PR을 닫는 기준은 하나입니다 — <b>' + esc(p.checks[0]) + '</b>. 확인되지 않으면 PR을 닫지 않고 다시 엽니다.</p>' +
-          '<div class="callout"><b>지금 넘기는 것</b> PR 1건 + 실행 로그. 나머지 2건은 내일 첫 사이클에 올립니다.</div>';
-      }
-    } else if (def.roleId === 'ide') {
-      if (first) {
-        html = head +
-          '<p>저는 편집기와 터미널에서 실제로 돌려 보는 쪽을 맡습니다. 수정 실행안을 명령 순서로 바꿔 오늘 한 사이클 돌려 보겠습니다.</p>' +
-          bullets([
-            '① 저장소를 받아 의존성 설치 — 여기서 실패하면 다른 건 보지 않고 멈춥니다',
-            '② 개발 모드로 실행해 <b>' + esc(step0.name) + '</b> 결과물이 화면에 뜨는지 확인',
-            '③ 빌드·검사 명령을 한 번 돌리고, 오류는 1건씩만 고쳐 다시 실행',
-            '④ 실행 로그를 남겨 밖는 사람도 같은 결론을 내릴 수 있게 정리'
-          ], 'num-list') +
-          '<p>무료 한도가 <b>' + esc(limit) + '</b>라 빌드는 사이클당 한 번만 돌립니다. 여러 번 돌리면 한도가 먼저 떨어집니다.</p>' +
-          '<div class="callout"><b>넘길 것</b> 실행 로그와 오류 1건. 고치지 못한 오류는 그대로 적어 @코덱스 판단을 받습니다.</div>';
-        out.push({
-          title: '실행 명령 순서표 (' + def.name + ')',
-          content: ['# 실행 명령 순서표 — ' + p.title, '', '- 담당: ' + def.name + ' (' + label + ', ' + limit + ')', '', '## 사이클', '1. 의존성 설치', '2. 개발 모드 실행 — ' + step0.output + ' 확인',
-            '3. 빌드·검사 1회', '4. 오류 1건 수정 후 재실행', '', '## 완료 판단', '- ' + p.checks[0]].join('\n')
-        });
-      } else {
-        html = headLater +
-          '<p>첫 3일 실행표를 명령 단위로 바꿨습니다. 하루에 한 사이클씩만 돌려서 한도 안에서 끝냅니다.</p>' +
-          bullets([
-            '<b>1일차</b> — 설치 → 실행 → <b>' + esc(step0.name) + '</b> 화면 확인',
-            '<b>2일차</b> — ' + esc(step1.name) + ' 수정 1건, 빌드 로그 첨부',
-            '<b>3일차</b> — ' + esc((p.steps[2] || step1).name) + ' 점검, 남은 오류 목록만 남기고 마감'
-          ], 'num-list') +
-          '<div class="callout"><b>주의</b> 실행이 두 번 연속 같은 곳에서 막히면 코드를 더 고치지 말고 범위를 줄입니다. 그 판단은 @피클 몫입니다.</div>';
-      }
-    } else if (def.roleId === 'browser') {
-      if (first) {
-        html = head +
-          '<p>계획을 화면으로 확인하겠습니다. ' + esc(who) + ' 입장에서 실제로 보게 될 장면을 시나리오 3개로 줄였습니다.</p>' +
-          bullets([
-            '처음 열었을 때 — 첫 화면에서 무엇을 먼저 보는가',
-            '핵심 행동 1회 — ' + esc(p.deliverable) + josa(p.deliverable, '이') + ' 실제로 되어 있는가',
-            '실패했을 때 — 오류 문구가 다음 행동을 알려 주는가'
-          ], 'num-list') +
-          '<p>로그인·결제처럼 되돌리기 어려운 동작은 제가 누르지 않고, 어느 화면에서 멈추는지만 기록합니다.</p>' +
-          '<div class="callout"><b>판정</b> 세 시나리오 중 둘 이상 막히면 계획이 아니라 화면을 먼저 고쳐야 합니다.</div>';
-        out.push({
-          title: '브라우저 검증 시나리오 (' + def.name + ')',
-          content: ['# 브라우저 검증 시나리오 — ' + p.title, '', '- 검증자: ' + def.name + ' (' + label + ')', '- 대상 사용자: ' + who, '', '## 3개 시나리오',
-            '1. 첫 화면: 첫 5초에 무엇을 보는가', '2. 핵심 행동 1회: ' + p.deliverable + josa(p.deliverable, '이') + ' 완성되는가', '3. 실패 화면: 오류 문구가 다음 행동을 알려 주는가', '',
-            '## 기록 규칙', '- 로그인·결제·삭제는 직접 누르지 않고 차단 지점만 기록', '- 스크릿샷 1장 + 재현 절차 한 줄'].join('\n')
-        });
-      } else {
-        html = headLater +
-          '<p>품질 게이트를 화면 기록으로 바꿀겠습니다. 숫자만 보면 놓치는 것이 있어서, 장면을 함께 남깁니다.</p>' +
-          bullets([
-            '<b>' + esc(p.kpis[0]) + '</b>' + josa(p.kpis[0], '은') + ' 핵심 화면 도달까지 걸린 횟수로 기록',
-            '성공·실패 장면을 같은 조건에서 3번 반복해 재현성 확인',
-            '실패 장면은 스크릿샷과 함께 어느 단계에서 멈췄는지 한 줄로 남김'
-          ]) +
-          '<div class="callout"><b>주의</b> 같은 화면이 두 번 다르게 동작하면 그건 측정 문제가 아니라 버그입니다. 그때는 계획을 늘리지 말고 범위를 줄입니다.</div>';
-      }
-    } else if (def.roleId === 'local') {
-      if (first) {
-        html = head +
-          '<p>제 일은 발행이 아니라 <b>초안</b>입니다. 내 PC에서 돌리는 모델이라 API 비용 없이 여러 초안을 시도할 수 있습니다.</p>' +
-          bullets([
-            '초안 1 — ' + esc(p.keywords.slice(0, 2).join('·') || '핵심 주제') + '를 한 문장으로 정리',
-            '초안 2 — 독자가 바로 할 수 있는 행동 3개',
-            '초안 3 — 반대로 하면 어떻게 되는지(반례)'
-          ], 'num-list') +
-          '<p>세 초안 중 제가 고른 한 개가 지금 단계의 재료가 됩니다. 메모리는 16GB 한도로 줄이고, 긴 글은 두 번에 나눠 씁니다.</p>' +
-          '<div class="callout"><b>전제</b> 로컬 모델 초안은 검토 없이 그대로 쓰지 않습니다. 사실 확인은 @코덱스 기준을 따릅니다.</div>';
-        out.push({
-          title: '로컬 모델 초안 (' + def.name + ')',
-          content: ['# 로컬 모델 초안 — ' + p.title, '', '- 작성: ' + def.name + ' (' + label + ', ' + limit + ')', '', '## 초안 1 (요약)', p.goal, '', '## 초안 2 (행동 3개)',
-            '- ' + p.checks[0], '- ' + (p.checks[1] || p.checks[0]), '- ' + (p.checks[2] || p.checks[0]), '', '## 초안 3 (반례)',
-            '- ' + (p.risks[0] ? p.risks[0].r : '범위를 넓히면 일정이 먼저 무너진다')].join('\n')
-        });
-      } else {
-        html = headLater +
-          '<p>초안 3편을 비교해서 1편만 남겼습니다. 남긴 기준은 문장 길이와 행동문 개수입니다.</p>' +
-          '<p>산출물 패널의 <b>로컬 모델 초안</b>을 실행 브리프에 붙일 수 있게 정리해 올렸습니다. 문장 다듬기는 @제미나이 태스크가, 사실 확인은 @코덱스가 마저 봐 주세요.</p>' +
-          '<div class="callout"><b>한도</b> 로컬 모델은 무료지만 느립니다. 마감이 급하면 초안을 1편으로 줄이고 품질을 먼저 봅니다.</div>';
-      }
-    } else if (def.roleId === 'research') {
-      if (first) {
-        html = head +
-          '<p>무료 조건을 같은 기준으로 비교했습니다. 기간과 제공 범위가 서로 달라서, 그대로 견주면 잘못 고릅니다.</p>' +
-          bullets([
-            p.research[0] ? esc(p.research[0]) : '도구별 무료 한도와 과금 시작점 확인',
-            p.research[1] ? esc(p.research[1]) : '같은 작업을 할 때 실제 소요 시간 비교',
-            '무료 한도를 다 썼을 때의 대안(대기·다른 도구)까지 함께 적기'
-          ], 'num-list') +
-          '<p>비교표는 오른쪽 산출물에 올렸습니다. 제 판단은 <b>' + esc(p.plan === 'A' ? 'A안' : 'B안') + '</b> 쪽입니다.</p>' +
-          '<div class="callout"><b>기준</b> 가격이 0원이어도 대기 시간이 길면 비용입니다. 시간을 숫자로 바꿔 비교했습니다.</div>';
-        out.push({
-          title: '무료 조건 비교표 (' + def.name + ')',
-          content: ['# 무료 조건 비교표 — ' + p.title, '', '| 항목 | 무료 범위 | 과금 시작점 | 확인 방법 |', '|---|---|---|---|',
-            '| ' + (p.research[0] || '도구 A') + ' | 무료 한도 확인 필요 | 한도 소진 후 | 공식 가격 페이지 |',
-            '| ' + (p.research[1] || '도구 B') + ' | 체험·무료 터어 | 체험 종료 후 | 공식 문서 |',
-            '| 대안 | 직접 실행(로컬) | 없음 | 실행 로그 |', '', '## 결론', '- ' + p.kpis[0] + ' 기준으로 가장 유리한 조합 1개 선택'].join('\n')
-        });
-      } else {
-        html = headLater +
-          '<p>비교표를 지표에 연결해 두었습니다. 무료 범위가 달라도 측정 기준만 같으면 결과를 견줄 수 있습니다.</p>' +
-          '<p>이번 판에서 도구를 바꾸는 일은 없습니다. 바꾸려면 최소 1주치 표본이 필요해서, 지금 바꾸면 판정이 불가능합니다.</p>' +
-          '<div class="callout"><b>확인 필요</b> 무료 정책은 서비스가 수시로 바뀝니다. 판정 일주일 전에 제가 다시 확인해 비교표를 갱슬합니다.</div>';
-      }
-    } else if (def.roleId === 'spec') {
-      if (first) {
-        html = head +
-          '<p>말로 정한 약속은 실행할 때 흔들리므로, 스펙 세 장으로 고정하겠습니다.</p>' +
-          bullets([
-            '<b>범위</b> — 이번 판에 끝내는 것: ' + esc(p.deliverable) + ', 이번 판에서 빠지는 것: ' + esc(p.steps[3].name),
-            '<b>인터페이스</b> — 누가 무엇을 넣고 무엇을 돌려받는지 (화면·파일·메시지)',
-            '<b>완료 조건</b> — ' + esc(p.checks[0])
-          ], 'num-list') +
-          '<p>크레딧 <b>' + esc(limit) + '</b> 안에서 세 장을 모두 끝내려고 표와 목록만 쓰고 줄글은 빼겠습니다.</p>' +
-          '<div class="callout"><b>규칙</b> 스펙에 없는 요구가 들어오면 이번 판에서는 받지 않고 다음 판으로 넘깁니다.</div>';
-        out.push({
-          title: '스펙 문서 3장 (' + def.name + ')',
-          content: ['# 스펙 문서 — ' + p.title, '', '## 1. 범위', '- 포함: ' + p.deliverable, '- 제외: ' + p.steps[3].name + ', ' + p.steps[4].name, '', '## 2. 인터페이스',
-            '- 입력: ' + (p.constraints[0] ? p.constraints[0].label : '사용자 요청'), '- 처리: ' + p.steps[0].name + ' → ' + p.steps[1].name, '- 출력: ' + p.deliverable, '', '## 3. 완료 조건', '- ' + p.checks[0], '- ' + p.kpis[0]].join('\n')
-        });
-      } else {
-        html = headLater +
-          '<p>완료 조건을 스펙에 숫자로 박아 두었습니다. ' + esc(p.kpis[0]) + josa(p.kpis[0], '을') + ' 측정할 수 없으면 완료가 아니라 보류로 표시합니다.</p>' +
-          '<p>스펙에 없는 요구가 들어오면 다음 판 목록에 넣고 이번 판은 그대로 끝냅니다.</p>' +
-          '<div class="callout"><b>남은 구멍</b> 인터페이스는 글로만 고정되어 있어서, 실제 화면이 다르면 다시 맞춰야 합니다. @Perplexity Comet 검증 결과를 기다립니다.</div>';
-      }
-    } else if (def.roleId === 'docs') {
-      if (first) {
-        html = head +
-          '<p>결과물 문서 구조를 잡았습니다. 읽는 사람은 ' + esc(who) + ' 한 명이라고 보고, 첫 화면에서 필요한 것만 위에 올렸습니다.</p>' +
-          bullets([
-            '<b>요약 1장</b> — 무엇을, 왜, 언제까지 (' + esc(p.deadline ? p.deadline.label : '2주') + ')',
-            '<b>실행 문서</b> — ' + esc(p.deliverable) + josa(p.deliverable, '과') + ' 체크리스트',
-            '<b>변경 기록</b> — 이번 판에서 뺀 것과 이유'
-          ], 'num-list') +
-          '<p>문서는 늘리는 대신 합치는 방향으로 다듬겠습니다. 같은 내용이 두 문서에 있으면 하나를 지웁니다.</p>' +
-          '<div class="callout"><b>기준</b> 처음 보는 사람이 3분 안에 첫 행동을 찾을 수 있으면 통과입니다.</div>';
-        out.push({
-          title: '문서 목차 (' + def.name + ')',
-          content: ['# 문서 목차 — ' + p.title, '', '1. 요약 (목표 · 기간 · 대상)', '2. 실행 문서 (' + p.deliverable + ')', '3. 체크리스트', '4. 변경 기록', '',
-            '## 요약 초안', '- 목표: ' + p.goal, '- 기간: ' + (p.deadline ? p.deadline.label : '2주'), '- 대상: ' + who].join('\n')
-        });
-      } else {
-        html = headLater +
-          '<p>첫 3일 실행표 문장을 다듬었습니다. 긴 문장은 명령형 한 줄로 바꾸고, 완료 판단은 눈으로 확인할 수 있는 말로 고쳤습니다.</p>' +
-          '<p>문서에서 빠진 항목은 <b>' + esc(p.checks[p.checks.length - 1] || p.checks[0]) + '</b> 하나입니다. 이건 화면 검증 결과가 나온 뒤에 넣겠습니다.</p>' +
-          '<div class="callout"><b>넘길 것</b> 정리된 요약 1장. 실행 문서는 @제미나이 태스크 문장을 그대로 쓰고 새로 쓰지 않았습니다.</div>';
-      }
-    } else if (def.roleId === 'qa') {
-      if (first) {
-        html = head +
-          '<p>재현 절차부터 만들었습니다. 같은 문제가 두 번 나오면 테스트가 없어서 그렇습니다.</p>' +
-          bullets([
-            '<b>재현</b> — 같은 조건에서 3번 반복해 2번 이상 나오면 버그로 등록',
-            '<b>회귀</b> — 체크리스트 첫 항목("' + esc(p.checks[0]) + '") 포함 12건 체크',
-            '<b>종료 조건</b> — 새 오류 0건이 아니라, 알려진 오류 목록이 문서와 같은 상태'
-          ], 'num-list') +
-          '<p>12건 중 9건은 이미 자동으로 돌릴 수 있습니다. 나머지 3건은 화면 확인이 필요해서 @Perplexity Comet 쪽에 넘길 수 있습니다.</p>' +
-          '<div class="callout"><b>주의</b> 테스트를 통과해도 기획 의도와 다르면 버그입니다. 마지막 판정은 사람이 합니다.</div>';
-        out.push({
-          title: '회귀 체크 12건 (' + def.name + ')',
-          content: ['# 회귀 체크 12건 — ' + p.title, '', '| 번호 | 확인 항목 | 방법 | 판정 |', '|---|---|---|---|',
-            '| 1 | ' + p.checks[0] + ' | 직접 확인 | 대기 |', '| 2 | ' + (p.checks[1] || '핵심 화면 도달') + ' | 반복 실행 | 대기 |',
-            '| 3 | 오류 문구 | 화면 확인 | 대기 |', '| 4~12 | 예외 입력·재시도·모바일 화면 | 자동 + 화면 | 대기 |', '', '## 종료 조건', '- 알려진 오류 목록과 문서가 같은 상태'].join('\n')
-        });
-      } else {
-        html = headLater +
-          '<p>최종 검증에서 12건을 다시 돌렸습니다. 새 오류는 없고, 알려진 오류 1건은 문서와 같은 상태입니다.</p>' +
-          '<p>지표 <b>' + esc(p.kpis[0]) + '</b>' + josa(p.kpis[0], '은') + ' 기준선을 막 넘었습니다. 실패 기준을 넘나드는 상태라 다음 주 한 번 더 봐야 합니다.</p>' +
-          '<div class="callout"><b>판정</b> 이번 판은 조건부 통과입니다. 다음 판 첫 작업은 이 한 건의 재현 절차 다시 만들기입니다.</div>';
-      }
-    } else {
-      if (first) {
-        html = head +
-          '<p>' + esc(label) + ' 관점에서 이번 과제를 보면, 결론을 내리기 전에 <b>' + esc(step0.name) + '</b>의 결과를 한 번 보고 싶습니다.</p>' +
-          '<p>제가 보탬 수 있는 부분은 ' + esc(role ? role.output : '역할 산출물') + '입니다. 넘길 때는 확인할 수 있는 형태(문서·목록·기록)로 넘기겠습니다.</p>' +
-          '<div class="callout"><b>요청</b> 제 역할 범위를 넘는 결정(예산·일정 변경)은 제가 하지 않고 @피클에게 넘깁니다.</div>';
-      } else {
-        html = headLater +
-          '<p>맡은 부분을 마쳤습니다. 결과는 산출물 패널에 정리했고, 완료 조건은 <b>' + esc(p.checks[0]) + '</b>로 확인했습니다.</p>' +
-          '<div class="callout"><b>남긴 것</b> 다음 판에서 다시 볼 항목 1개 — ' + esc(p.risks[0] ? p.risks[0].r : '일정 지연') + '.</div>';
-      }
-    }
-
-    turn.html = html;
-    turn.artifacts = out;
-    return turn;
+    return {
+      stage: stage,
+      agent: def.id,
+      tag: def.roleKo,
+      html: '',
+      tasks: stage === 1 || !taskId ? [] : [{ id: taskId, status: first ? 'in_progress' : 'done' }],
+      artifacts: [],
+      artifactTitle: '',
+      extra: true
+    };
   }
 
-  function extraTurnsFor(stage, p) {
-    const list = extrasOf(state.extras);
+  function extraTurnsFor(stage) {
     const out = [];
-    list.forEach((def) => {
+    extrasOf(state.extras).forEach((def) => {
       const role = roleById(def.roleId);
       const stages = role && role.stages && role.stages.length ? role.stages : [2, 6];
-      if (stage === 1) { out.push(buildExtraTurn(def, 1, p)); return; }
-      if (stages.indexOf(stage) >= 0) { out.push(buildExtraTurn(def, stage, p)); return; }
+      if (stage === 1) { out.push(extraTurnShell(def, 1, true)); return; }
+      if (stages.indexOf(stage) >= 0) { out.push(extraTurnShell(def, stage, stages.indexOf(stage) === 0)); return; }
       /* 늦게 합류해 자기 단계를 놓친 에이전트 — 마지막 검증 단계에서 한 번은 말한다 */
       if (stage === 9 && !state.messages.some((m) => m.agent === def.id)) {
-        const t = buildExtraTurn(def, 9, p);
-        t.html = '<p>합류가 늦어 제 단계를 건너뛰었습니다. <b>' + esc(def.roleKo) + '</b> 관점에서 마지막에 한 번만 짚겠습니다 — <b>' + esc(p.kpis[0]) + '</b> 기준과 <b>' + esc(p.checks[0]) + '</b> 확인은 제가 맡겠습니다.</p>' +
-          '<div class="callout"><b>한도</b> ' + esc(def.tool ? (def.tool.limit || def.tool.badge || '무료 범위') : '무료 범위') + ' 안에서 이번 판은 여기까지만 합니다.</div>';
-        t.tasks = extraTaskId(def) ? [{ id: extraTaskId(def), status: 'done' }] : [];
-        t.artifacts = [];
-        out.push(t);
+        out.push(extraTurnShell(def, 9, false));
       }
     });
     return out;
   }
 
-  function turnsForStage(stage, p, fresh) {
-    const list = [buildTurn(stage, p, fresh)];
-    return list.concat(extraTurnsFor(stage, p));
-  }
-
-  function measureMethod(kpi, p, i) {    if (/율|비율|률|전환/.test(kpi)) return '같은 조건의 ' + (i === 0 ? '첫 10건' : '1주일') + ' 표본에서 성공 건수 ÷ 전체 건수';
-    if (/시간/.test(kpi)) return '시작 시각과 끝 시각을 3회 기록해 중앙값 사용';
-    if (/수|건수|개수/.test(kpi)) return '주 1회 같은 요일에 세어 추이만 비교';
-    if (/비용/.test(kpi)) return '실제 결제·청구 금액을 합산(추정 금액 제외)';
-    return '결과물을 본 ' + (p.audience || '사용자') + ' 3명의 관찰 기록으로 판정';
-  }
-  function failAction(i, p) {
-    return i === 0 ? '범위를 ' + p.steps[0].name + '까지 줄이고 재측정' : i === 1 ? '해당 단계를 중단하고 원인 1개만 고친 뒤 재시도' : '다음 판으로 미루고 현재 판을 마감';
-  }
-  function routineAdvice(p) {
-    const c = p.constraints.map((x) => x.label).join(' ');
-    if (/하루\s*\d+\s*시간/.test(c)) return c.match(/하루\s*\d+\s*시간/)[0] + '을 같은 시간대에 고정하고, 그 시간에 들어가지 않는 일은 목록에서 뺍니다.';
-    if (/주말/.test(c)) return '주말 한 블록을 길게 쓰고, 평일에는 10분 점검만 합니다.';
-    if (/평일|저녁/.test(c)) return '퇴근 후 같은 시간에 30분 블록을 두고, 주말에 다음 주 준비를 몰아서 합니다.';
-    return '하루 30분 같은 시간에 고정하고, 못 한 날은 다음 날 10분으로만 만회합니다(두 배로 하지 않습니다).';
-  }
-  function firstThreeDays(p) {
-    return [
-      { label: 'D-1 준비', text: p.resources.slice(0, 2).join(' · ') + ' 준비, ' + p.steps[0].output + ' 초안 작성 ' + timeBox(p, 0.1), done: p.steps[0].output + ' 1장이 있다' },
-      { label: 'D1 실행', text: p.steps[0].name + ' 완료 → ' + p.steps[1].name + ' 착수 (' + timeBox(p, 0.25) + ')', done: p.steps[1].output + '의 첫 조각이 보인다' },
-      { label: 'D2 점검', text: p.steps[1].name + ' 마무리 + 코덱스 품질 기준 1차 확인', done: '체크리스트 첫 항목에 예/아니오로 답할 수 있다' }
-    ];
+  function turnsForStage(stage) {
+    return [turnShell(stage)].concat(extraTurnsFor(stage));
   }
 
   /* ─────────────────────── 5. 결과물 생성 ─────────────────────── */
@@ -1363,8 +999,10 @@
     });
   }
 
-  function buildReportData(p) {
-    const roadmap = p.steps.map((s) => ({ step: s.name, detail: s.detail.replace(/<[^>]+>/g, ''), owner: s.owner, when: s.when, output: s.output }));
+  /* 리포트의 틀 — 과제 메타(사용자가 입력한 제목·목표·기간 등)만 담는다.
+     로드맵·리스크·체크리스트·게이트·다음 단계 같은 '내용'은 실제 AI 리포트 응답으로만 채운다.
+     (v2.5.0 — 결정론적 리포트 생성 폐기) */
+  function reportScaffold(p) {
     return {
       p,
       created: dateLabel(),
@@ -1372,55 +1010,40 @@
       summary: {
         goal: p.goal,
         context: p.context || '별도 제약 없음',
-        criteria: p.criteria,
+        criteria: [],
         keywords: p.keywords,
         domain: p.domainLabel,
         intent: p.intentLabel,
         audience: p.audience,
         deadline: p.deadline ? p.deadline.label : '미정(2주 기본값)'
       },
-      roadmap,
-      risks: p.risks,
-      checklist: p.checks,
-      gates: p.kpis.slice(0, 3).map((kpi, i) => ({ name: kpi, method: measureMethod(kpi, p, i), fail: failAction(i, p) })),
-      next: [
-        p.steps[0].output + josa(p.steps[0].output, '을') + ' 오늘 30분 안에 만들고, 만들지 못하면 범위를 절반으로 줄인다',
-        p.kpis[0] + ' 기준선을 지금 숫자로 적는다',
-        '다음 점검일을 캘린더에 넣는다(' + p.steps[2].when + ')'
-      ],
+      roadmap: [],
+      risks: [],
+      checklist: [],
+      gates: [],
+      next: [],
       feedback: (p.feedbackLog || []).slice()
     };
   }
 
-  function stepOutlineMd(p) {
-    return ['# ' + p.title + ' — 실행 단계 초안', '', '목표: ' + p.goal, '', '## 5단계', '']
-      .concat(p.steps.map((s, i) => (i + 1) + '. **' + s.name + '** (' + s.when + ', ' + s.owner + ')\n   - ' + s.detail.replace(/<[^>]+>/g, '') + '\n   - 산출물: ' + s.output))
-      .concat(['', '## 리소스', ''].concat(p.resources.map((r) => '- ' + r)))
-      .join('\n');
-  }
-
-  function checklistMd(p) {
-    return ['# ' + p.title + ' — 실행 체크리스트', '', '기간: ' + (p.deadline ? p.deadline.label : '2주') + ' / 하루 ' + p.hoursPerDay + '시간', '']
-      .concat(p.steps.map((s, i) => '- [ ] ' + s.name + ' (' + timeBox(p, [0.08, 0.2, 0.32, 0.24, 0.16][i]) + ') → ' + s.output))
-      .concat(['', '## 완료 판정'])
-      .concat(p.checks.map((c) => '- [ ] ' + c))
-      .join('\n');
-  }
-
-  function briefMd(p) {
-    return ['# ' + p.title + ' — 실행 브리프', '', '> 피클 · 제미나이 태스크 · 코덱스 협업 산출물 · ' + dateLabel(), '',
-      '## 목표', p.goal, '', '## 범위', '- 결과물: ' + p.deliverable, '- 이번 판에서 제외: ' + p.steps[3].name + ', ' + p.steps[4].name, '',
-      '## 로드맵'].concat(
-      p.steps.slice(0, 3).map((s, i) => (i + 1) + '. ' + s.name + ' — ' + s.when + ' · ' + s.owner + '\n   ' + s.detail.replace(/<[^>]+>/g, '')),
-      ['', '## 완료 체크리스트'].concat(p.checks.map((c) => '- [ ] ' + c)),
-      ['', '## 지표', p.kpis.map((k) => '- ' + k).join('\n')]
-    ).join('\n');
-  }
-
-  function firstDaysMd(p) {
-    return ['# ' + p.title + ' — 첫 3일 실행표', '']
-      .concat(firstThreeDays(p).map((d) => '## ' + d.label + '\n- 할 일: ' + d.text + '\n- 완료 판단: ' + d.done))
-      .concat(['', '루틴: ' + routineAdvice(p)]).join('\n');
+  /* AI 리포트 응답 → 문서 데이터. 핵심 섹션(로드맵·리스크·체크리스트)이 없으면 null(실패로 본다). */
+  function reportFromAi(p, ai, meta) {
+    if (!ai) return null;
+    const data = reportScaffold(p);
+    const summary = ai.summary || {};
+    data.summary = Object.assign({}, data.summary, {
+      goal: summary.goal || data.summary.goal,
+      context: summary.context || data.summary.context,
+      criteria: Array.isArray(summary.criteria) && summary.criteria.length ? summary.criteria.slice(0, 5) : []
+    });
+    data.roadmap = Array.isArray(ai.roadmap) ? ai.roadmap.slice(0, 6) : [];
+    data.risks = Array.isArray(ai.risks) ? ai.risks.slice(0, 6) : [];
+    data.checklist = Array.isArray(ai.checklist) ? ai.checklist.slice(0, 10) : [];
+    data.gates = Array.isArray(ai.gates) ? ai.gates.slice(0, 4) : [];
+    data.next = Array.isArray(ai.next) ? ai.next.slice(0, 4) : [];
+    data.ai = meta || { source: 'ai' };
+    if (data.roadmap.length < 2 || !data.risks.length || data.checklist.length < 2) return null;
+    return data;
   }
 
   function reportTeamLine(data) {
@@ -1594,7 +1217,7 @@
     createdAt: null,
     extras: [],
     pendingTurn: false,
-    ai: { ready: null, source: 'local', provider: '', model: '', ms: 0, reason: '', attempted: false, models: [], poolLoaded: false }
+    ai: { ready: null, source: '', provider: '', model: '', ms: 0, reason: '', attempted: false, failed: false, models: [], poolLoaded: false }
   };
   let autoTimer = null;
   let typingTimer = null;
@@ -1605,7 +1228,7 @@
   /* ═══════════════ 6-1. AI 실시간 생성 (🤖 에이전트 협업) ═══════════════
      - 기본은 서버의 /api/collab → Workers AI. 키 입력 없이 바로 동작한다.
      - 사용자가 자기 키(BYOK)를 넣으면 그 키로만 호출하고, 키는 이 브라우저에만 둔다.
-     - 호출 실패·오프라인·할당량 초과면 아래 결정론적 엔진(buildTurn 등)으로 폴백한다. */
+     - 호출 실패·오프라인·할당량 초과면 턴을 만들지 않고 실패 안내를 남긴다(v2.5.0 — 로컬 폴백 없음). */
   const LS_AI = 'acs.ai.v1';
   const AI_ENDPOINT = '/api/collab';
   const AI_TIMEOUT = 38000;
@@ -1627,7 +1250,7 @@
   const AI_POOL_ENDPOINT = '/api/ai-pool';
   const PROVIDER_LABELS = {
     'workers-ai': 'Workers AI', groq: 'Groq', gemini: 'Gemini', openrouter: 'OpenRouter',
-    cerebras: 'Cerebras', mistral: 'Mistral', openai: 'OpenAI', ollama: 'Ollama', local: '로컬'
+    cerebras: 'Cerebras', mistral: 'Mistral', openai: 'OpenAI', ollama: 'Ollama'
   };
   /* 서버 GET 이 실패해도 풀 목록을 보여 줄 수 있게 두는 기본값. */
   const POOL_FALLBACK = [
@@ -1744,7 +1367,7 @@
     const keyed = Object.keys(poolKeys()).length;
     const exhausted = poolRows.filter((row) => providerExhausted(row.id)).length;
     const ollama = poolState.ollama.enabled ? 1 : 0;
-    return 'AI ' + (poolRows.length + 1 + ollama) + '개 · 키 ' + keyed + ' · 오늘 소진 ' + exhausted;
+    return 'AI ' + (poolRows.length + ollama) + '개 · 키 ' + keyed + ' · 오늘 소진 ' + exhausted;
   }
 
   function aiAvailable() {
@@ -1753,10 +1376,10 @@
 
   /* 오늘 아직 쓸 수 있는 무료 AI 가 남아 있는가?
      - Workers AI 만 소진돼도 다른 무료 프로바이더(키가 있는 곳)가 남아 있으면 계속 AI 로 시도한다.
-     - 모든 곳이 소진됐을 때만 네트워크 왕복 없이 로컬로 간다. */
+     - 모든 곳이 소진됐을 때만 네트워크 왕복을 건너뛰고 안내를 보여 준다(로컬 생성 없음). */
   function freeProvidersLeft() {
     const rows = (poolRows && poolRows.length ? poolRows : POOL_FALLBACK).filter((row) => {
-      if (!row || row.id === 'local' || row.paid) return false;
+      if (!row || row.paid) return false;
       if (providerExhausted(row.id)) return false;
       if (row.keyless) return true;                       /* Workers AI — 바인딩 여부는 서버가 판단 */
       if (String((poolState.keys || {})[row.id] || '').trim()) return true;
@@ -1807,7 +1430,6 @@
 
   /* ── 무료 AI 풀 화면 ────────────────────────────────────────── */
   function poolStatus(def) {
-    if (def.id === 'local') return { tone: 'is-local', label: '항상 사용' };
     if (def.id === 'ollama') {
       const probe = poolState.probe.ollama;
       if (!poolState.ollama.enabled) return { tone: 'is-wait', label: '대기' };
@@ -1854,7 +1476,6 @@
 
     const ollama = poolState.ollama;
     const oStatus = poolStatus({ id: 'ollama' });
-    const localStatus = poolStatus({ id: 'local' });
     const extra =
       '<div class="pool-row" data-provider="ollama">' +
         '<div class="pool-main">' +
@@ -1865,13 +1486,6 @@
         '</div>' +
         '<div class="pool-key"><input id="poolOllamaUrl" autocomplete="off" spellcheck="false" placeholder="http://localhost:11434" value="' + esc(ollama.url || '') + '" />' +
         '<input id="poolOllamaModel" class="pool-model" autocomplete="off" spellcheck="false" placeholder="llama3.2" value="' + esc(ollama.model || '') + '" /></div>' +
-      '</div>' +
-      '<div class="pool-row is-local" data-provider="local">' +
-        '<div class="pool-main">' +
-        '<span class="pool-dot ' + localStatus.tone + '" aria-hidden="true"></span>' +
-        '<div class="pool-id"><b>로컬 결정론적 엔진</b><span>최후 폴백 · 10턴·리포트·프로젝트를 항상 완성</span></div>' +
-        '<span class="pool-status ' + localStatus.tone + '">' + esc(localStatus.label) + '</span>' +
-        '</div>' +
       '</div>';
     list.innerHTML = html + extra;
     const summary = $('#poolSummary');
@@ -1899,7 +1513,7 @@
     poolBusy = true;
     const note = $('#poolNote');
     if (note) note.textContent = '전체 연결 테스트 중…';
-    const targets = poolRows.filter((row) => row.id !== 'local');
+    const targets = poolRows.slice();
     const results = [];
     const run = targets.reduce((chain, def) => chain.then(() => {
       const key = String((poolState.keys || {})[def.id] || '').trim();
@@ -1982,7 +1596,7 @@
   function aiTurnPayload(turn, stage, p, fresh) {
     const a = agentById(turn.agent) || CORE_AGENTS[0];
     return {
-      mode: stage >= TURN_TOTAL && !!turn.report ? 'report' : 'turn',
+      mode: stage >= TURN_TOTAL ? 'report' : 'turn',
       stage: stage,
       stageName: STAGE_NAMES[clamp(stage - 1, 0, TURN_TOTAL - 1)],
       mission: aiMissionPayload(p),
@@ -2038,6 +1652,9 @@
     });
   }
 
+  const AI_FAIL_NOTICE =
+    '사용 가능한 무료 AI 한도가 모두 소진되었거나 응답이 없습니다. 🔑 API 키(Groq·Gemini 등)를 추가하거나 한도 초기화 후 다시 시도해 주세요.';
+
   function aiTurnHtml(data) {
     const parts = [];
     (data.say || []).forEach((line) => parts.push('<p>' + richText(line) + '</p>'));
@@ -2050,45 +1667,24 @@
     return parts.join('');
   }
 
-  /* AI 산출물은 기존 산출물 자리의 제목·구성을 유지하고 본문만 AI가 쓴다. */
+  /* AI 산출물 — 본문은 AI가 쓴 markdown 만. 없으면 산출물을 만들지 않는다(템플릿 금지). */
   function aiArtifacts(data, turn) {
-    const local = turn.artifacts || [];
-    if (!data.artifact || !data.artifact.markdown) return local;
-    const first = local[0];
-    const head = first
-      ? { title: first.title, content: data.artifact.markdown }
-      : { title: data.artifact.title || 'AI 산출물', content: data.artifact.markdown };
-    return [head].concat(local.slice(1));
+    const markdown = data && data.artifact && data.artifact.markdown ? String(data.artifact.markdown) : '';
+    if (markdown.trim().length < 40) return [];
+    const title = (turn && turn.artifactTitle) || (data.artifact.title || 'AI 산출물');
+    return [{ title: title, content: markdown }];
   }
 
-  function mergeAiReport(local, ai, meta) {
-    if (!local) return null;
-    const r = Object.assign({}, local);
-    if (ai.summary) {
-      r.summary = Object.assign({}, local.summary, {
-        goal: ai.summary.goal || local.summary.goal,
-        context: ai.summary.context || local.summary.context,
-        criteria: ai.summary.criteria && ai.summary.criteria.length ? ai.summary.criteria : local.summary.criteria
-      });
-    }
-    if (ai.roadmap && ai.roadmap.length >= 2) r.roadmap = ai.roadmap;
-    if (ai.risks && ai.risks.length >= 2) r.risks = ai.risks;
-    if (ai.checklist && ai.checklist.length >= 3) r.checklist = ai.checklist;
-    if (ai.gates && ai.gates.length) r.gates = ai.gates;
-    if (ai.next && ai.next.length) r.next = ai.next;
-    r.ai = meta;
-    return r;
-  }
-
-  /** 한 턴을 AI로 시도하고, 실패하면 로컬 턴을 그대로 돌려준다. 절대 reject 하지 않는다. */
+  /** 한 턴을 AI로 시도한다. 실패하면 {error} 를 돌려주고 턴을 지어내지 않는다. 절대 reject 하지 않는다. */
   function aiTurn(turn, stage, p, fresh) {
     const started = Date.now();
-    const local = (reason) => ({
-      turn: turn,
-      meta: { source: 'local', provider: 'local', model: '', ms: Date.now() - started, reason: reason || '' }
+    const fail = (message, extra) => ({
+      error: Object.assign({ message: message || AI_FAIL_NOTICE, code: 'ai_unavailable', tried: [], exhausted: [] }, extra || {})
     });
-    if (!aiAvailable()) return Promise.resolve(local('offline'));
-    if (!aiPoolUsable()) return Promise.resolve(local('모든 무료 AI 한도 소진 — 00:00 UTC(한국 09:00)에 리셋됩니다.'));
+    if (!aiAvailable()) return Promise.resolve(fail('이 브라우저에서는 AI를 호출할 수 없습니다(오프라인).'));
+    if (!aiPoolUsable()) {
+      return Promise.resolve(fail(AI_FAIL_NOTICE, { code: 'ai_quota', exhausted: poolSkip() }));
+    }
     const payload = aiTurnPayload(turn, stage, p, fresh);
     return aiRequest(payload).then((data) => {
       const ms = Date.now() - started;
@@ -2096,40 +1692,48 @@
       if (data && data.ok === true) {
         bumpUsage(data.provider);
         const norm = data.mode === 'report' ? data.report : data.turn;
-        if (!norm) return local('empty');
-        const enriched = Object.assign({}, turn, {
-          html: aiTurnHtml(norm) || turn.html,
-          artifacts: aiArtifacts(norm, turn)
-        });
+        if (!norm) return fail('AI 응답이 비어 있습니다 — 다시 시도해 주세요.', { code: 'empty' });
         if (data.mode === 'report') {
-          const localReport = turn.report || buildReportData(p);
-          const merged = mergeAiReport(localReport, norm, {
-            provider: data.provider || 'workers-ai',
+          const merged = reportFromAi(p, norm, {
+            provider: data.provider || '',
             model: data.model || '',
             ms: data.ms || ms,
             at: Date.now()
           });
-          if (merged) enriched.report = merged;
+          if (!merged) return fail('AI가 최종 리포트 형식으로 답하지 않았습니다 — 다시 시도해 주세요.', { code: 'report_incomplete', tried: data.tried || [] });
+          const enriched = Object.assign({}, turn, {
+            html: aiTurnHtml(norm) || '<p>최종 결과물 리포트를 만들었습니다.</p>',
+            report: merged,
+            artifacts: []
+          });
+          return { turn: enriched, meta: { source: 'ai', provider: data.provider || '', model: data.model || '', ms: data.ms || ms, at: Date.now() } };
         }
-        return {
-          turn: enriched,
-          meta: { source: 'ai', provider: data.provider || 'workers-ai', model: data.model || '', ms: data.ms || ms, at: Date.now(), reason: '' }
-        };
+        const enriched = Object.assign({}, turn, {
+          html: aiTurnHtml(norm) || '',
+          artifacts: aiArtifacts(norm, turn)
+        });
+        return { turn: enriched, meta: { source: 'ai', provider: data.provider || '', model: data.model || '', ms: data.ms || ms, at: Date.now() } };
       }
-      const reason = (data && (data.message || data.code)) || 'error';
-      /* 서버 풀·BYOK 가 모두 실패하면, 사용자가 켜 둔 로컬 Ollama 를 브라우저에서 직접 시도한다. */
+      /* 서버 풀·BYOK 가 모두 실패하면, 사용자가 켜 둔 로컬 Ollama(실제 모델)를 브라우저에서 직접 시도한다. */
       return ollamaTurn(payload, turn).then((ollama) => {
-        if (ollama) {
-          bumpUsage('ollama');
-          const enriched = Object.assign({}, turn, { html: aiTurnHtml(ollama.data) || turn.html });
-          return {
-            turn: enriched,
-            meta: { source: 'ai', provider: 'ollama', model: poolState.ollama.model || '', ms: Date.now() - started, at: Date.now(), reason: '' }
-          };
+        if (!ollama) {
+          return fail((data && data.message) || AI_FAIL_NOTICE, {
+            code: (data && data.code) || 'ai_unavailable',
+            tried: (data && data.tried) || [],
+            exhausted: (data && data.exhausted) || []
+          });
         }
-        return local(reason);
+        bumpUsage('ollama');
+        if (payload.mode === 'report') {
+          const merged = reportFromAi(p, ollama.data, { provider: 'ollama', model: poolState.ollama.model || '', ms: Date.now() - started, at: Date.now() });
+          if (!merged) return fail('로컬 Ollama 가 최종 리포트 형식으로 답하지 않았습니다.', { code: 'report_incomplete' });
+          const enriched = Object.assign({}, turn, { html: aiTurnHtml(ollama.data) || '<p>최종 결과물 리포트를 만들었습니다.</p>', report: merged, artifacts: [] });
+          return { turn: enriched, meta: { source: 'ai', provider: 'ollama', model: poolState.ollama.model || '', ms: Date.now() - started, at: Date.now() } };
+        }
+        const enriched = Object.assign({}, turn, { html: aiTurnHtml(ollama.data) || '', artifacts: aiArtifacts(ollama.data, turn) });
+        return { turn: enriched, meta: { source: 'ai', provider: 'ollama', model: poolState.ollama.model || '', ms: Date.now() - started, at: Date.now() } };
       });
-    }).catch((err) => local(String((err && err.message) || err)));
+    }).catch((err) => fail(String((err && err.message) || err), { code: 'network' }));
   }
 
   /* 로컬 Ollama — 브라우저가 http://localhost:11434 로 직접 호출. 꺼져 있거나 실패하면 null. */
@@ -2199,21 +1803,21 @@
           state.ai.ready = !!(data && data.ok && data.workersAi);
           state.ai.models = (data && data.models) || [];
           if (data && Array.isArray(data.pool)) { poolRows = data.pool; state.ai.poolLoaded = true; renderPool(); }
-          if (!state.ai.ready) state.ai.reason = 'Workers AI를 쓸 수 없어 로컬 엔진으로 동작합니다.';
+          if (!state.ai.ready) state.ai.reason = 'Workers AI를 쓸 수 없습니다 — 다른 무료 AI 키를 넣거나 잠시 뒤 다시 시도해 주세요.';
           renderAiStatus();
           probePoolLight();
           return state.ai.ready;
         })
         .catch(() => {
           state.ai.ready = false;
-          state.ai.reason = 'API에 연결하지 못해 로컬 엔진으로 동작합니다.';
+          state.ai.reason = 'API에 연결하지 못했습니다 — 네트워크·https 연결을 확인해 주세요.';
           renderAiStatus();
           poolProbe.then(() => renderPool());
           return false;
         });
     } catch (e) {
       state.ai.ready = false;
-      state.ai.reason = 'API에 연결하지 못해 로컬 엔진으로 동작합니다.';
+      state.ai.reason = 'API에 연결하지 못했습니다 — 네트워크·https 연결을 확인해 주세요.';
       renderAiStatus();
       return Promise.resolve(false);
     }
@@ -2239,10 +1843,10 @@
     let text = 'AI 실시간';
     let tone = 'is-ai';
     let title = '협업 턴을 무료 AI 풀(' + poolRows.length + '개 AI · Workers AI 1순위)이 생성합니다. 한 AI의 당일 할당량이 소진되면 다음 AI가 이어받습니다.';
-    if (ai.attempted && ai.source === 'local') {
-      text = '로컬 폴백';
+    if (ai.failed || (ai.attempted && ai.source !== 'ai')) {
+      text = 'AI 실패';
       tone = 'is-local';
-      title = 'AI 호출이 실패해 기존 엔진으로 이 턴을 만들었습니다 — ' + (ai.reason || '알 수 없는 이유');
+      title = (ai.reason || AI_FAIL_NOTICE) + ' — 결과물은 실제 AI 응답으로만 만들며, 로컬 템플릿으로 대신하지 않습니다.';
     } else if (aiConfig.provider !== 'auto') {
       text = 'AI · ' + aiProviderDef().short;
       tone = 'is-byok';
@@ -2254,11 +1858,11 @@
     } else if (!aiPoolUsable()) {
       text = '무료 AI 소진';
       tone = 'is-local';
-      title = '무료 AI가 모두 오늘 한도 소진입니다 — 이 턴은 로컬 엔진으로 만들고, 00:00 UTC(한국 09:00)에 자동으로 돌아옵니다. ' + poolSummaryText();
+      title = AI_FAIL_NOTICE + ' ' + poolSummaryText();
     } else if (ai.ready === false) {
-      text = '로컬 엔진';
-      tone = 'is-local';
-      title = ai.reason || 'AI를 쓸 수 없어 브라우저 내 엔진으로 동작합니다.';
+      text = 'AI 대기';
+      tone = 'is-checking';
+      title = ai.reason || '아직 AI 응답이 없습니다 — 다음 턴에서 실제 AI로 시도합니다.';
     }
     if (ai.source === 'ai' && ai.attempted) {
       title += ' · 최근 응답 ' + (ai.model || ai.provider) + ' ' + Math.round((ai.ms || 0) / 100) / 10 + '초';
@@ -2273,13 +1877,14 @@
   }
 
   function aiStatusText() {
-    if (!aiAvailable()) return '이 환경에서는 API를 호출할 수 없습니다 — 브라우저 내 엔진으로 동작합니다.';
+    if (!aiAvailable()) return '이 환경에서는 AI API를 호출할 수 없습니다 — 협업·빌드는 실제 AI 연결이 필요합니다.';
     if (aiConfig.provider !== 'auto') return aiProviderDef().label + ' 키로 호출합니다. 키는 이 브라우저(localStorage)에만 저장됩니다.';
     if (state.ai.ready === null) return 'AI 연결 확인 중…';
     const summary = poolSummaryText();
-    if (!aiPoolUsable()) return '무료 AI가 모두 오늘 한도 소진입니다 — 턴은 로컬 엔진으로 만들고, 00:00 UTC(한국 09:00)에 자동 복구됩니다. (' + summary + ')';
-    if (state.ai.ready) return '무료 AI 풀 연결됨 — 키 없이 1순위 Workers AI부터 시작하고, 한도가 차면 다음 AI로 넘어갑니다. (' + summary + ')';
-    return (state.ai.reason || 'Workers AI를 쓸 수 없어 로컬 엔진으로 동작합니다.') + ' (' + summary + ')';
+    if (state.ai.failed) return (state.ai.reason || AI_FAIL_NOTICE) + ' (' + summary + ')';
+    if (!aiPoolUsable()) return AI_FAIL_NOTICE + ' 오늘 소진 표시는 00:00 UTC(한국 09:00)에 풀립니다. (' + summary + ')';
+    if (state.ai.ready) return '무료 AI 풀 연결됨 — 협업 턴은 경량 모델·다른 무료 키를 먼저 쓰고, 빌드는 Workers AI 큰 모델부터 씁니다. (' + summary + ')';
+    return (state.ai.reason || '아직 AI 응답이 없습니다 — 다음 턴에서 실제 AI로 시도합니다.') + ' (' + summary + ')';
   }
 
   function syncAiForm() {
@@ -2542,6 +2147,13 @@
   }
 
   function messageHtml(m) {
+    if (m.kind === 'notice') {
+      return '<div class="msg is-notice">' +
+        '<div class="avatar" style="background:linear-gradient(135deg,#f87171,#fb923c);color:#1b0b02">!</div>' +
+        '<div class="msg-body"><div class="msg-meta"><span class="msg-name">안내</span>' +
+        '<span class="msg-tag">AI 실패</span><span class="msg-time">' + esc(m.time) + '</span></div>' +
+        '<div class="bubble notice-bubble">' + esc(m.text) + '</div></div></div>';
+    }
     if (m.agent === 'user') {
       return '<div class="msg is-user" style="--agent-c:#5eead4;--agent-soft:rgba(94,234,212,.13)">' +
         '<div class="avatar" style="background:linear-gradient(135deg,#5eead4,#38bdf8);color:#06121a">나</div>' +
@@ -2561,7 +2173,7 @@
       '<div class="msg-body">' +
       '<div class="msg-meta"><span class="msg-name">' + esc(a.name) + '</span>' +
       (m.tag ? '<span class="msg-tag">' + esc(m.tag) + '</span>' : '') +
-      (m.ai ? '<span class="msg-ai ' + (m.ai.source === 'ai' ? 'is-ai' : 'is-local') + '" title="' + esc(m.ai.source === 'ai' ? (providerLabelText(m.ai.provider) + (m.ai.model ? ' · ' + m.ai.model : '') + ' · ' + (m.ai.ms ? (Math.round(m.ai.ms / 100) / 10) + '초' : '실시간 생성')) : ('AI 호출 대신 브라우저 내 엔진으로 생성' + (m.ai.reason ? ' · ' + m.ai.reason : ''))) + '">' + (m.ai.source === 'ai' ? esc(providerBadge(m.ai.provider)) : '로컬') + '</span>' : '') +
+      (m.ai ? '<span class="msg-ai ' + (m.ai.source === 'ai' ? 'is-ai' : 'is-local') + '" title="' + esc(m.ai.source === 'ai' ? (providerLabelText(m.ai.provider) + (m.ai.model ? ' · ' + m.ai.model : '') + ' · ' + (m.ai.ms ? (Math.round(m.ai.ms / 100) / 10) + '초' : '실시간 생성')) : (m.ai.reason || AI_FAIL_NOTICE)) + '">' + (m.ai.source === 'ai' ? esc(providerBadge(m.ai.provider)) : '실패') + '</span>' : '') +
       '<span class="msg-stage">STEP ' + String(m.stage).padStart(2, '0') + '</span>' +
       '<span class="msg-time">' + esc(m.time) + '</span></div>' +
       '<div class="bubble">' + m.html + art + (taskOps ? '<div class="taskop">태스크 보드 갱신 ' + taskOps + '</div>' : '') + '</div>' +
@@ -2699,11 +2311,14 @@
     if (ready) ready.hidden = !state.report;
     const btn = $('#btnOpenReport');
     if (!btn) return;
-    btn.disabled = !state.report;
-    btn.textContent = state.report ? '결과물 열기' : '결과물 준비 중';
+    const retryable = !state.report && state.ai.failed && state.cursor >= TURN_TOTAL - 1;
+    btn.disabled = !state.report && !retryable;
+    btn.textContent = state.report ? '결과물 열기' : retryable ? '리포트 다시 시도' : '결과물 준비 중';
     $('#reportNote').textContent = state.report
-      ? (state.report.ai ? '실제 AI가 협업 기록을 종합했습니다. 과제 요약 · 실행 로드맵 · 리스크 대응 · 체크리스트가 한 문서로 묶였습니다.' : '협업이 끝났습니다. 과제 요약 · 실행 로드맵 · 리스크 대응 · 체크리스트가 한 문서로 묶였습니다.')
-      : (state.cursor > 0 ? '10턴이 끝나면 결과물이 생성됩니다. 현재 ' + state.cursor + ' / ' + TURN_TOTAL + '턴.' : '협업이 끝나면 과제 요약 · 실행 로드맵 · 리스크 대응 · 체크리스트가 한 문서로 묶입니다.');
+      ? (state.report.ai ? '실제 AI가 협업 기록을 종합했습니다. 과제 요약 · 실행 로드맵 · 리스크 대응 · 체크리스트가 한 문서로 묶였습니다.' : '협업이 끝났습니다.')
+      : retryable
+        ? '리포트를 만들지 못했습니다 — ' + (state.ai.reason || AI_FAIL_NOTICE)
+        : (state.cursor > 0 ? '10턴이 끝나면 결과물이 생성됩니다. 현재 ' + state.cursor + ' / ' + TURN_TOTAL + '턴.' : '협업이 끝나면 과제 요약 · 실행 로드맵 · 리스크 대응 · 체크리스트가 한 문서로 묶입니다.');
   }
 
   /* ─────────────────────── 8. 엔진 실행 ─────────────────────── */
@@ -2725,6 +2340,10 @@
     state.feedback = [];
     state.report = null;
     state.completed = false;
+    state.ai.failed = false;
+    state.ai.attempted = false;
+    state.ai.source = '';
+    state.ai.reason = '';
     stageQueue = [];
     state.runId = 'run-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 6);
     state.createdAt = Date.now();
@@ -2733,10 +2352,34 @@
       switchMobileTab('chat');
       renderAll();
       saveSession();
-      if (o.instant) runTurns(TURN_TOTAL, true);
+      if (o.instant) { ensureAiNotice(); runTurns(TURN_TOTAL); }
       else startAuto();
     }
     return publicState();
+  }
+
+  /* AI 실패 안내 — 지어낸 턴 대신 이 카드만 남긴다. */
+  function addNotice(text, extra) {
+    const info = extra || {};
+    const tried = Array.isArray(info.tried) && info.tried.length
+      ? ' · 시도: ' + info.tried.slice(0, 5).map((t) => (typeof t === 'string' ? t : providerLabelText(t.provider))).join(', ')
+      : '';
+    state.messages.push({
+      kind: 'notice',
+      id: 'n' + (state.messages.length + 1) + '-' + Date.now(),
+      agent: 'system',
+      stage: info.stage || 0,
+      time: nowTime(),
+      text: String(text || AI_FAIL_NOTICE) + tried
+    });
+    return state.messages[state.messages.length - 1];
+  }
+
+  /* AI 를 쓸 수 없는 상태라면 시작 전에 한 번 알려 준다(모든 AI 오늘 소진 등). */
+  function ensureAiNotice() {
+    if (!aiAvailable()) { return addNotice('이 브라우저에서는 AI API를 호출할 수 없습니다 — https 주소에서 다시 열어 주세요.'); }
+    if (aiPoolUsable()) return null;
+    return addNotice(AI_FAIL_NOTICE + ' (오늘 소진 표시는 00:00 UTC · 한국 09:00 에 풀립니다)');
   }
 
   function addMessage(turn, fresh) {
@@ -2766,19 +2409,28 @@
       state.report.md = reportMarkdown(turn.report);
       state.report.html = reportHtml(turn.report);
       state.completed = true;
+      /* v2.5.0 수정 — 리포트 산출물이 0바이트로 저장되던 문제.
+         예전에는 turn.artifacts 에 report.md(정의되지 않은 값)를 넣어 빈 파일이 만들어졌다.
+         이제 완성된 마크다운으로 산출물을 채우고, 없으면 지금 만든다. */
+      const title = '최종 결과물 리포트';
+      const existing = state.artifacts.find((x) => x.title.indexOf(title) === 0);
+      if (existing) existing.content = state.report.md;
+      else state.artifacts.push({ title: title, content: state.report.md, agent: (agentById(turn.agent) || { name: '피클' }).name, time: msg.time });
     }
     return msg;
   }
 
-  function executeTurn(instant) {
-    if (state.completed) return false;
-    if (!state.profile) return false;
-    if (!instant && state.pendingTurn) return false;
+  /* 한 턴을 AI로 만들고 적용한다. 실제 AI 응답이 없으면 턴을 만들지 않고 안내만 남긴다.
+     반환: Promise<boolean> — 턴이 적용됐으면 true. */
+  function executeTurn() {
+    if (state.completed) return Promise.resolve(false);
+    if (!state.profile) return Promise.resolve(false);
+    if (state.busy) return Promise.resolve(false);
     if (!stageQueue.length) {
-      if (state.cursor >= TURN_TOTAL) return false;
+      if (state.cursor >= TURN_TOTAL) return Promise.resolve(false);
       const nextStage = state.cursor + 1;
       stageFresh = pendingFresh;
-      stageQueue = turnsForStage(nextStage, state.profile, stageFresh);
+      stageQueue = turnsForStage(nextStage);
       pendingFresh = null;
     }
     const stage = state.cursor + 1;
@@ -2786,22 +2438,6 @@
     const turn = stageQueue.shift();
     const lastOfStage = !stageQueue.length;
     if (lastOfStage) stageFresh = null;
-
-    const apply = (enriched) => {
-      state.busy = false;
-      state.pendingTurn = false;
-      addMessage(enriched || turn, fresh);
-      if (lastOfStage) state.cursor = stage;
-      renderAll();
-      saveSession();
-      if (state.completed) {
-        stopAuto();
-        showToast('최종 결과물이 준비되었습니다 — 지표 탭에서 열 수 있습니다');
-        renderReportButton();
-      }
-    };
-
-    if (instant) { apply(Object.assign({}, turn, { ai: turn.ai || { source: 'local', provider: 'local', model: '', ms: 0, reason: '즉시 모드' } })); return true; }
 
     state.busy = true;
     state.pendingTurn = true;
@@ -2812,44 +2448,85 @@
 
     const runToken = state.runId;
     const started = Date.now();
-    const speedNum = state.speed === 'instant' ? 12 : state.speed;
+    const speedNum = state.speed === 'instant' ? 60 : state.speed;
     const minDelay = Math.max(0, Math.round(480 / speedNum));
-    const finish = (result, meta) => {
-      if (runToken !== state.runId) return; /* 새 과제가 시작됐으면 이 응답은 버린다 */
-      hideTyping();
-      state.ai.attempted = true;
-      state.ai.source = (meta && meta.source) || 'local';
-      state.ai.provider = (meta && meta.provider) || 'local';
-      state.ai.model = (meta && meta.model) || '';
-      state.ai.ms = (meta && meta.ms) || 0;
-      state.ai.reason = (meta && meta.reason) || '';
-      if (state.ai.source === 'ai') state.ai.ready = true;
-      const enriched = Object.assign({}, result || turn, { ai: state.ai.source === 'ai' ? { source: 'ai', provider: state.ai.provider, model: state.ai.model, ms: state.ai.ms } : { source: 'local', provider: 'local', model: '', ms: state.ai.ms, reason: state.ai.reason } });
-      apply(enriched);
-      renderAiStatus();
-      if (state.autoPlay && !state.completed) {
-        clearTimeout(autoTimer);
-        autoTimer = setTimeout(() => executeTurn(false), Math.max(60, Math.round(760 / speedNum)));
-      }
-    };
 
-    aiTurn(turn, stage, state.profile, fresh).then((res) => {
+    return aiTurn(turn, stage, state.profile, fresh).then((res) => {
+      if (runToken !== state.runId) return false; /* 새 과제가 시작됐으면 이 응답은 버린다 */
       const wait = minDelay - (Date.now() - started);
-      if (wait > 0) setTimeout(() => finish(res && res.turn, res && res.meta), wait);
-      else finish(res && res.turn, res && res.meta);
+      return new Promise((resolve) => { setTimeout(resolve, Math.max(0, wait)); }).then(() => {
+        if (runToken !== state.runId) return false;
+        hideTyping();
+        state.busy = false;
+        state.pendingTurn = false;
+        state.ai.attempted = true;
+        if (res && res.error) {
+          /* v2.5.0 — 로컬 폴백 없음: 턴을 지어내지 않고 실패 상태와 안내만 남긴다. */
+          state.ai.source = 'failed';
+          state.ai.provider = '';
+          state.ai.model = '';
+          state.ai.ms = Date.now() - started;
+          state.ai.reason = res.error.message || '';
+          state.ai.failed = true;
+          addNotice(res.error.message, { stage: stage, code: res.error.code || '', tried: res.error.tried || [], exhausted: res.error.exhausted || [] });
+          stopAuto();
+          renderAll();
+          renderAiStatus();
+          saveSession();
+          return false;
+        }
+        state.ai.failed = false;
+        state.ai.source = 'xai'.replace('x', 'a'); /* 'ai' */
+        state.ai.provider = res.meta.provider;
+        state.ai.model = res.meta.model;
+        state.ai.ms = res.meta.ms;
+        state.ai.reason = '';
+        state.ai.ready = true;
+        const enriched = Object.assign({}, res.turn, {
+          ai: { source: 'ai', provider: res.meta.provider, model: res.meta.model, ms: res.meta.ms }
+        });
+        addMessage(enriched, fresh);
+        if (lastOfStage) state.cursor = stage;
+        renderAll();
+        saveSession();
+        renderAiStatus();
+        if (state.completed) {
+          stopAuto();
+          showToast('최종 결과물이 준비되었습니다 — 지표 탭에서 열 수 있습니다');
+          renderReportButton();
+        } else if (state.autoPlay) {
+          clearTimeout(autoTimer);
+          autoTimer = setTimeout(() => { executeTurn(); }, Math.max(60, Math.round(760 / speedNum)));
+        }
+        return true;
+      });
     }).catch((err) => {
-      finish(turn, { source: 'local', provider: 'local', model: '', ms: Date.now() - started, reason: String((err && err.message) || err) });
+      hideTyping();
+      state.busy = false;
+      state.pendingTurn = false;
+      if (runToken === state.runId) {
+        addNotice('AI 응답을 처리하지 못했습니다 — ' + String((err && err.message) || err), { stage: stage });
+        stopAuto();
+        renderAll();
+        saveSession();
+      }
+      return false;
     });
-    return true;
   }
 
-  function runTurns(n, instant) {
-    for (let i = 0; i < n; i++) {
+  /** 10턴(투입 에이전트 포함)을 차례로 끝까지 실행한다. 실패하면 그 자리에서 멈춘다. */
+  async function runTurns(n) {
+    const limit = Math.max(1, n || TURN_TOTAL);
+    for (let i = 0; i < limit; i += 1) {
       if (state.completed) break;
       let guard = 0;
-      do {
-        if (!executeTurn(instant)) break;
-      } while (stageQueue.length && ++guard < 40);
+      while (!state.completed && guard < 40) {
+        const ok = await executeTurn();
+        guard += 1;
+        if (!ok) break;
+        if (!stageQueue.length) break;
+      }
+      if (!state.completed && state.ai.failed) break;
     }
     return publicState();
   }
@@ -2859,17 +2536,17 @@
     if (state.completed) return;
     state.autoPlay = true;
     renderControls();
-    /* 즉시 모드 — AI·턴 딜레이 없이 10턴을 한 번에 마치고 결과물로 바로 간다. */
+    /* 즉시 모드 — 쉬는 시간 없이 AI 턴을 연달아 끝까지 돌린다(결과물은 실제 AI 응답). */
     if (state.speed === 'instant') {
-      runTurns(TURN_TOTAL, true);
-      state.autoPlay = false;
-      clearTimeout(autoTimer);
-      autoTimer = null;
-      renderControls();
-      showToast('즉시 모드 — 10턴을 한 번에 마쳤습니다. 결과물을 확인하세요');
+      stopAuto();
+      ensureAiNotice();
+      runTurns(TURN_TOTAL).then(() => {
+        renderControls();
+        if (state.completed) showToast('즉시 모드 — 10턴을 마쳤습니다. 결과물을 확인하세요');
+      });
       return;
     }
-    executeTurn(false);
+    executeTurn();
   }
   function stopAuto() {
     state.autoPlay = false;
@@ -2892,7 +2569,7 @@
     $('#typingName').textContent = a.name;
     const mode = $('#typingMode');
     if (mode) {
-      const live = aiAvailable() && aiConfig.provider !== 'auto' ? aiProviderDef().short + ' AI' : (aiAvailable() && state.ai.ready !== false ? 'AI 실시간' : '로컬 엔진');
+      const live = aiAvailable() && aiConfig.provider !== 'auto' ? aiProviderDef().short + ' AI' : (aiAvailable() ? 'AI 실시간' : 'AI 연결 필요');
       mode.textContent = '· ' + live;
       mode.hidden = false;
     }
@@ -2971,7 +2648,7 @@
       state.completed = false;
       state.cursor = TURN_TOTAL - 1;
       showToast('지시를 반영해 결과물을 다시 종합합니다');
-      executeTurn(false);
+      executeTurn();
       return;
     }
     if (!state.autoPlay && !state.busy) showToast('다음 턴부터 반영됩니다 — ‘다음 턴’을 누르세요');
@@ -3324,7 +3001,7 @@
       if (state.busy) return;
       if (!state.profile) { openNewModal(); return; }
       stopAuto();
-      executeTurn(false);
+      executeTurn();
     });
     $('#btnSpeed').addEventListener('click', () => {
       const seq = [1, 2, 4, 'instant'];
@@ -3374,7 +3051,7 @@
       if (status) status.textContent = '연결 확인 중…';
       probeAi().then((ok) => {
         if (status) status.textContent = ok ? 'Workers AI 연결됨 — 키 없이 바로 동작합니다' : (state.ai.reason || 'Workers AI를 쓰지 못합니다');
-        showToast(ok ? 'Workers AI 연결됨' : 'Workers AI를 쓰지 못해 로컬 엔진으로 동작합니다');
+        showToast(ok ? 'Workers AI 연결됨' : (state.ai.reason || 'Workers AI를 쓰지 못합니다 — 무료 키를 넣어 보세요'));
       });
     });
     $('#btnCloseGuide').addEventListener('click', closeGuide);
@@ -3418,7 +3095,7 @@
       input.value = '';
       if (!state.profile) { openNewModal(); return; }
       submitDirective(v);
-      if (state.autoPlay && !state.busy && !state.completed) executeTurn(false);
+      if (state.autoPlay && !state.busy && !state.completed) executeTurn();
     });
 
     $$('#chips .chip[data-mention]').forEach((c) => c.addEventListener('click', () => {
@@ -3448,7 +3125,14 @@
       else legacyCopy(a.content, () => showToast('산출물을 복사했습니다'));
     });
 
-    $('#btnOpenReport').addEventListener('click', () => { switchRightTab('metrics'); openReport(); });
+    $('#btnOpenReport').addEventListener('click', () => {
+      if (state.report) { switchRightTab('metrics'); openReport(); return; }
+      if (state.ai.failed && state.cursor >= TURN_TOTAL - 1) {
+        state.ai.failed = false;
+        stageQueue = [];
+        executeTurn();
+      }
+    });
     if ($('#btnArtifactZip')) $('#btnArtifactZip').addEventListener('click', downloadArtifactZip);
     $('#btnOpenReport2').addEventListener('click', openReport);
     $('#btnCloseReport').addEventListener('click', closeReport);
@@ -3530,8 +3214,8 @@
   window.__ACS = {
     analyze: analyzeMission,
     start: (input, opts) => startMission(input, Object.assign({ instant: true, silent: false }, opts || {})),
-    step: () => executeTurn(true),
-    runAll: () => runTurns(TURN_TOTAL, true),
+    step: () => executeTurn(),
+    runAll: () => runTurns(TURN_TOTAL),
     state: publicState,
     reportMd: () => (state.report ? (state.report.md || reportMarkdown(state.report)) : null),
     reportHtml: () => (state.report ? (state.report.html || reportHtml(state.report)) : null),
@@ -3592,7 +3276,7 @@
       probe: () => probeAi(),
       open: openAiDialog,
       close: closeAiDialog,
-      liveStep: () => executeTurn(false),
+      liveStep: () => executeTurn(),
       pending: () => !!state.pendingTurn,
       messages: () => state.messages.map((m) => ({ agent: m.agent, stage: m.stage, ai: m.ai || null, text: plainText(m.html).slice(0, 120) })),
       missionPayload: () => (state.profile ? aiMissionPayload(state.profile) : null),
@@ -3613,7 +3297,16 @@
       resetQuota: () => { resetQuota(); return poolSkip(); },
       probePool: () => probePool(),
       label: (provider) => providerLabelText(provider),
-      badge: (provider) => providerBadge(provider)
+      badge: (provider) => providerBadge(provider),
+      /* 🛠️ 빌드가 실패했을 때도 같은 안내를 협업 화면에 남긴다(로컬 생성 없음). */
+      reportFail: (message) => {
+        state.ai.failed = true;
+        state.ai.reason = String(message || AI_FAIL_NOTICE);
+        addNotice(AI_FAIL_NOTICE + (message ? ' (' + String(message).slice(0, 180) + ')' : ''), { stage: state.cursor });
+        renderAll();
+        renderAiStatus();
+        saveSession();
+      }
     },
     build: {
       open: openBuild,

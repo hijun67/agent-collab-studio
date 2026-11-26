@@ -15,12 +15,13 @@
  *  }
  *  → {ok, mode, provider, providerLabel, model, ms, turn|report, tried[], exhausted[], warnings[]}
  *
- *  - 기본은 무료 AI 풀: Workers AI → Groq → Gemini → OpenRouter → Cerebras → Mistral.
- *    모델은 라운드 로빈으로 섮여, Workers AI 가 4006/quota 로 막혀도 남은 무료 AI 의 모든 모델까지
+ *  - 기본은 무료 AI 풀: 협업 턴은 사용자 무료 키 → Workers AI 경량 모델 순서(빌드 몫을 남긴다).
+ *    모델은 라운드 로빈으로 섞여, Workers AI 가 4006/quota 로 막혀도 남은 무료 AI 의 모든 모델까지
  *    예산 안에서 시도한다. 유료(OpenAI)는 자동 순환에서 완전히 제외된다(BYOK 로 직접 고를 때만).
- *  - 한 프로바이더/모델이 429·4006·quota 를 돌려주면 exhausted 에 담아 알려 주고, 그 턴은
+ *  - 한 프로바이더/모델이 하루 한도(4006·quota)를 돌려주면 exhausted 에 담아 알려 주고, 그 턴은
  *    다음 AI 가 이어서 만든다. 브라우저는 exhausted 를 오늘 하루 건너뛴다(localStorage).
- *  - 모두 실패하면 ok:false 를 돌려주고 브라우저는 결정론적 로컬 엔진으로 폴백한다.
+ *  - 429(분당 제한)는 하루 소진이 아니다 — 서버가 짧게 쉬었다가 다시 시도하고 cooling 에 담는다.
+ *  - 모두 실패하면 ok:false + 429/503 과 안내 문구를 돌려준다(v2.5.0 — 로컬 폴백 없음).
  *  - 키는 요청에만 쓰고 저장하지 않는다.
  *  - GET 은 기능 확인용(모델 목록·Workers AI 유무·풀 현황).
  */
@@ -51,6 +52,11 @@ const TURN_TIMEOUT = 14000;
 const REPORT_TIMEOUT = 16000;
 const TOTAL_BUDGET = 30000;
 const MAX_BODY = 80 * 1024;
+
+/* v2.5.0 — 로컬 결정론적 엔진을 폐기했으므로, 모든 AI 가 실패하면 이 문구를 그대로 보여 준다.
+   (가짜/템플릿 결과물을 만들지 않는다.) */
+export const AI_FAIL_NOTICE =
+  "사용 가능한 무료 AI 한도가 모두 소진되었거나 응답이 없습니다. 🔑 API 키(Groq·Gemini 등)를 추가하거나 한도 초기화 후 다시 시도해 주세요.";
 
 function json(data, status = 200) {
   return new Response(JSON.stringify(data), {
@@ -165,7 +171,7 @@ export async function onRequest(context) {
       ok: true,
       service: "agent-collab-studio",
       endpoint: "collab",
-      version: "2.4.0",
+      version: "2.5.0",
       workersAi: Boolean(env && env.AI && typeof env.AI.run === "function"),
       models: COLLAB_MODELS,
       byok: Object.keys(BYOK_PROVIDERS),
@@ -208,7 +214,6 @@ export async function onRequest(context) {
   const fallbackTitle = req.mode === "report" ? "최종 결과물 리포트" : "";
 
   let result;
-  let attemptProviders = [];
   if (req.byok) {
     result = await callByok(req, messages, fallbackTitle);
   } else {
@@ -217,21 +222,21 @@ export async function onRequest(context) {
     const prefer = String(body.prefer || "auto").slice(0, 30);
     const model = String(req.model || "").slice(0, 80);
     const models = model && prefer !== "auto" ? { [prefer]: model } : {};
-    const attempts = buildAttempts({ keys, skip, prefer, models, env, includeWorkersAi: true });
-    attemptProviders = attempts.reduce((list, item) => (list.includes(item.provider) ? list : list.concat(item.provider)), []);
+    const attempts = buildAttempts({ keys, skip, prefer, models, env, includeWorkersAi: true, profile: "collab" });
     if (!attempts.length) {
       return json({
         ok: false,
         mode: req.mode,
         stage: req.stage,
         code: "ai_unavailable",
-        message: "사용할 수 있는 무료 AI가 없습니다(Workers AI 미연결·키 없음). 이 턴은 로컬 엔진으로 만듭니다.",
-        provider: "workers-ai",
+        message: AI_FAIL_NOTICE,
+        provider: "",
         ms: Date.now() - started,
         tried: [],
         exhausted: [],
+        cooling: [],
         warnings: [],
-      }, 200);
+      }, 503);
     }
     const pool = await runPool({
       attempts,
@@ -256,37 +261,34 @@ export async function onRequest(context) {
   if (!result.ok || !result.data) {
     const tried = result.tried || [];
     const joined = typeof tried[0] === "string" ? tried.join(" ") : describeTried(tried);
-    let message = result.message || "AI 응답을 만들지 못했습니다.";
     const exhausted = result.exhausted || [];
-    if (exhausted.length && joined) {
-      message = "무료 AI 할당량이 소진되었습니다 — " + joined + ". 00:00 UTC(한국 09:00)에 리셋되며, 이 턴은 로컬 엔진으로 만듭니다.";
-      if (attemptProviders.length <= 1) {
-        message += " 지금은 Workers AI만 등록되어 있습니다 — Groq·Gemini·OpenRouter 등 무료 키를 넣으면 자동으로 이어서 시도합니다.";
-      }
-    } else if (/4006|free allocation|neurons|quota/i.test(joined)) {
-      message = "Workers AI 무료 일일 할당량(10,000 neurons)이 소진되어, 남은 무료 AI를 모두 시도했지만 이 턴은 만들지 못했습니다. 00:00 UTC(한국 09:00)에 리셋됩니다.";
-      if (attemptProviders.length <= 1) message += " 다른 무료 AI 키(Groq·Gemini 등)를 넣으면 소진 직후 자동으로 이어받습니다.";
+    const cooling = result.cooling || [];
+    /* v2.5.0 — 로컬 결정론적 엔진 폐기. 이제 실패는 실패로 돌려주고 브라우저가 안내한다. */
+    let message = result.message || AI_FAIL_NOTICE;
+    if (exhausted.length) {
+      message = AI_FAIL_NOTICE + (joined ? " (" + joined + ")" : "");
+    } else if (cooling.length) {
+      message = "분당 요청 제한(429)으로 잠시 막혔습니다 — 몇 초 뒤 다시 시도해 주세요." + (joined ? " (" + joined + ")" : "");
     } else if (/deprecated|5028|model_gone/i.test(joined)) {
-      message = "이 모델은 제공이 종료되었습니다. 다음 모델로 다시 시도해 주세요.";
+      message = "이 모델은 제공이 종료되었습니다. 다음 모델로 다시 시도해 주세요." + (joined ? " (" + joined + ")" : "");
     } else if (tried.length && tried.every((t) => t && typeof t === 'object' && t.kind === 'auth')) {
       message = "무료 AI 키를 인증하지 못했습니다 — " + joined + ". AI 설정에서 각 프로바이더 키를 다시 확인해 주세요.";
-    } else if (/JSON|형식 불일치/i.test(joined) && !result.message) {
-      message = "AI가 정한 형식으로 답하지 않아 이 턴은 로컬 엔진으로 만들었습니다.";
-    } else if (result.code === "bad_output" && joined) {
-      message = "AI 응답을 해석하지 못했습니다 — " + joined.slice(0, 120);
+    } else if (joined) {
+      message = "AI가 정한 형식으로 답하지 않았습니다 — " + joined.slice(0, 160) + ". 다시 시도해 주세요.";
     }
     return json({
       ok: false,
       mode: req.mode,
       stage: req.stage,
-      code: result.code || "ai_unavailable",
+      code: exhausted.length ? "ai_quota" : result.code || "ai_unavailable",
       message,
-      provider: result.provider || (req.byok ? "byok-" + req.byok.provider : "workers-ai"),
+      provider: result.provider || (req.byok ? "byok-" + req.byok.provider : ""),
       ms,
       tried,
-      exhausted: exhausted,
+      exhausted,
+      cooling,
       warnings: result.warnings || [],
-    }, 200);
+    }, exhausted.length ? 429 : 503);
   }
 
   const payload = {
@@ -301,6 +303,7 @@ export async function onRequest(context) {
     warnings: result.warnings || [],
     tried: result.tried || [],
     exhausted: result.exhausted || [],
+    cooling: result.cooling || [],
     byok: Boolean(req.byok),
   };
   payload[req.mode === "report" ? "report" : "turn"] = result.data;

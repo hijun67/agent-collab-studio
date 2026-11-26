@@ -21,8 +21,8 @@ const byId = Object.fromEntries(catalog.tools.map((t) => [t.id, t]));
 const CATS = ["assistant", "coding", "browser", "local"];
 const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
 
-test("카탈로그 — v2.4.0 · 2026-11-26 · 26종(팀 투입 22종)", () => {
-  assert.equal(catalog.version, "2.4.0");
+test("카탈로그 — v2.5.0 · 2026-11-26 · 26종(팀 투입 22종)", () => {
+  assert.equal(catalog.version, "2.5.0");
   assert.equal(catalog.updated, "2026-11-26");
   assert.equal(catalog.tools.length, 26);
   assert.equal(catalog.tools.filter((t) => t.injectable).length, 22);

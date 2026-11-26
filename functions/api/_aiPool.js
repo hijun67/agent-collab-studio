@@ -6,9 +6,14 @@
  *  - 이 파일은 순수 함수 + fetch 만 씁니다(Cloudflare Functions · Node 테스트 공용).
  *  - 키는 요청 본문으로만 받고 저장하지 않습니다. 서버 환경변수(GROQ_API_KEY 등)가 있으면
  *    사용자가 키를 넣지 않아도 그 프로바이더를 씁니다.
- *  - 할당량 소진 판정: HTTP 429, Workers AI 4006/5016(free allocation), quota / rate limit /
- *    insufficient_quota / exceeded 문구. 소진된 프로바이더는 결과에 담아 브라우저가 오늘 하루 건너뛰고,
- *    같은 턴 안에서도 그 프로바이더의 남은 모델은 다시 부르지 않는다.
+ *  - 두 종류의 실패를 구분한다(v2.5.0).
+ *      quota       — 하루 무료 한도 소진(Workers AI 4006/5016, free allocation, daily limit,
+ *                    insufficient_quota 등). 결과의 exhausted 에 담아 브라우저가 오늘 하루 건너뛴다.
+ *      rate_limited— 분당 요청 제한(429 Too Many Requests). 하루 소진이 아니므로 오늘 건너뛰지 않고
+ *                    짧은 쿨다운(Retry-After 또는 1~4초) 뒤 같은 모델을 한 번 더 시도한다.
+ *  - 과제별 예산 분리(profile): 협업(collab)은 Workers AI 의 경량 모델을 쓰고 사용자 무료 키를 먼저
+ *    순환해 하루 neurons 를 아낀다. 빌드(build)는 Workers AI 의 큰 모델부터 쓴다. 그래서 10턴 협업이
+ *    하루 한도를 다 써서 🛠️ 빌드가 결과물을 못 만드는 일이 줄어든다.
  *  - 유료(paid) 프로바이더는 자동 순환에서 제외한다 — 사용자가 직접 고르고 자기 키를 넣은 경우만.
  *  - 시도 시간은 프로바이더별로 나눠 가진다(allocateTimeout) — 앞쪽 AI가 느려도 뒤쪽 무료 AI까지 간다.
  */
@@ -30,6 +35,12 @@ export const AI_POOL = [
       "@cf/qwen/qwen3.8-27b",
       "@cf/google/gemma-4-26b-a4b-it",
       "@cf/meta/llama-3.1-8b-instruct-fast",
+    ],
+    /* 협업 턴은 경량 모델만 — 같은 10,000 neurons 로 더 많은 턴을 만들고 빌드 몫을 남긴다. */
+    collabModels: [
+      "@cf/meta/llama-3.1-8b-instruct-fast",
+      "@cf/google/gemma-4-26b-a4b-it",
+      "@cf/qwen/qwen3.8-27b",
     ],
   },
   {
@@ -130,16 +141,8 @@ export const LOCAL_PROVIDERS = [
     note: "브라우저가 localhost:11434 로 직접 호출 — https 페이지에서는 브라우저가 막을 수 있음",
     models: ["llama3.2", "qwen2.5", "gemma3"],
   },
-  {
-    id: "local",
-    label: "로컬 결정론적 엔진",
-    short: "로컬 폴백",
-    free: "항상 동작 · 무료",
-    quotaScope: "provider",
-    keyless: true,
-    note: "AI 가 모두 실패해도 10턴·리포트·프로젝트 파일을 만드는 최후 폴백",
-    models: [],
-  },
+  /* v2.5.0 — '로컬 결정론적 엔진'(하드코딩 템플릿 협업·앱 생성기)은 폐기했다.
+     결과물은 실제 AI 응답으로만 만들고, 모두 실패하면 명시적 오류와 안내를 돌려준다. */
 ];
 
 export const BYOK_IDS = AI_POOL.filter((p) => !p.keyless).map((p) => p.id);
@@ -218,7 +221,11 @@ export function isSkipped(providerId, model, skip) {
 
 /**
  * 시도 순서를 만든다.
- *  - 사용자가 고정한 엔진(prefer) → Workers AI(키 없이 무료) → 나머지 무료 프로바이더(풀 순서).
+ *  - profile: "collab"(10턴 협업) | "build"(🛠️ 빌드 프로젝트 생성).
+ *      build  — Workers AI(큰 모델) → 나머지 무료 프로바이더(풀 순서).
+ *      collab — 사용자 무료 키(다른 프로바이더) 먼저 → Workers AI 는 경량 collabModels 로 마지막.
+ *               그래서 협업이 하루 Workers AI neurons 를 다 쓰지 않고 빌드 몫을 남긴다.
+ *  - 사용자가 고정한 엔진(prefer)은 두 profile 모두 맨 앞이다(고정 모델이 있으면 그 모델만).
  *  - 모델은 **라운드 로빈**으로 섞는다: 각 프로바이더의 1번 모델을 먼저 모두 시도하고,
  *    그다음 2번 모델… 그래서 Workers AI 가 4006/quota 로 막혀도 Groq·Gemini·OpenRouter·
  *    Cerebras·Mistral 의 첫 모델까지 예산 안에서 반드시 도달한다.
@@ -226,15 +233,20 @@ export function isSkipped(providerId, model, skip) {
  *    prefer 로 그 프로바이더를 직접 고르고 자기 키를 넣은 경우에만 시도한다.
  *  - 키가 없는 프로바이더는 건너뛴다(Workers AI 는 바인딩이 있어야 한다).
  */
-export function buildAttempts({ keys, skip, prefer, models, env, includeWorkersAi }) {
+export function buildAttempts({ keys, skip, prefer, models, env, includeWorkersAi, profile }) {
   const pool = new Map(keys && typeof keys === "object" ? Object.entries(keys) : []);
   const chosen = models && typeof models === "object" ? models : {};
   const preferId = String(prefer || "").toLowerCase();
   const preferDef = preferId && preferId !== "auto" ? providerById(preferId) : null;
+  const mode = profile === "collab" ? "collab" : "build";
 
   const modelList = (provider, forcedModel) => {
     const only = forcedModel || chosen[provider.id];
-    return only ? [only] : provider.models;
+    if (only) return [only];
+    if (mode === "collab" && Array.isArray(provider.collabModels) && provider.collabModels.length) {
+      return provider.collabModels;
+    }
+    return provider.models;
   };
 
   /** 자격(바인딩·키)이 있고 유료 제한을 통과해야 목록에 넣는다. */
@@ -268,8 +280,14 @@ export function buildAttempts({ keys, skip, prefer, models, env, includeWorkersA
   };
 
   if (preferDef) add(preferDef, chosen[preferDef.id]);
-  add(providerById("workers-ai"));
-  for (const provider of AI_POOL) add(provider);
+  if (mode === "build") {
+    add(providerById("workers-ai"));
+    for (const provider of AI_POOL) add(provider);
+  } else {
+    /* 협업: 사용자 무료 키를 먼저 쓰고, Workers AI 는 경량 모델로 마지막에 — 빌드 몫을 남긴다. */
+    for (const provider of AI_POOL) if (provider.id !== "workers-ai") add(provider);
+    add(providerById("workers-ai"));
+  }
 
   const rounds = ordered.reduce((max, item) => Math.max(max, item.models.length), 0);
   const attempts = [];
@@ -308,15 +326,22 @@ function skipProvider(provider, skip, model) {
   return false;
 }
 
-/** 실패 응답을 성격별로 나눈다 — 소진(quota)이면 그 프로바이더를 오늘 건너뛴다. */
+/** 실패 응답을 성격별로 나눈다.
+ *  - quota        : 하루 무료 한도 소진 → 오늘 건너뛴다.
+ *  - rate_limited : 분당 요청 제한(429) → 짧은 쿨다운 뒤 같은 모델을 한 번 더 시도한다.
+ */
 export function classifyFailure(status, text) {
   const body = String(text || "");
   if (/timeout|timed out|after \d+ms|aborted/i.test(body)) return "timeout";
-  if (
-    status === 429 ||
-    /4006|5016|free allocation|neurons|quota|rate.?limit|too many requests|insufficient_quota|exceeded your current|daily limit|resource_exhausted/i.test(body)
-  ) {
+  /* 분당 제한 문구가 분명하면 하루 소진 검사보다 먼저 rate_limited 로 본다. */
+  if (/per minute|this minute|\brpm\b|\btpm\b|requests per minute|tokens per minute/i.test(body)) return "rate_limited";
+  /* 하루 한도 소진 — 이때만 오늘 하루 건너뛴다. */
+  if (/4006|5016|free allocation|neurons|daily limit|daily free|insufficient_quota|exceeded your current|resource_exhausted|quota exceeded|out of credits|per day|per-day|하루/i.test(body)) {
     return "quota";
+  }
+  /* 분당 제한 — 429 이거나 rate limit 문구. 하루 소진으로 취급하지 않는다. */
+  if (status === 429 || /rate.?limit|too many requests|requests per minute|tokens per minute|\brpm\b|\btpm\b|retry.?after/i.test(body)) {
+    return "rate_limited";
   }
   if (
     status === 401 ||
@@ -329,6 +354,40 @@ export function classifyFailure(status, text) {
   if (status >= 500) return "server";
   if (status === 404) return "model_gone";
   return "error";
+}
+
+/* 429 쿨다운 — 같은 isolate 안에서 잠깐 쉬는 시간(ms). 모델 단위로 기억한다. */
+const COOLING = new Map();
+const DEFAULT_COOLDOWN_MS = 1500;
+const MAX_COOLDOWN_MS = 5000;
+
+export function cooldownMs(attempt, retryAfterMs) {
+  const value = Number(retryAfterMs);
+  if (!attempt) return DEFAULT_COOLDOWN_MS;
+  const pinned = COOLING.get(attempt.provider + ":" + attempt.model);
+  const wait = Number.isFinite(value) && value > 0 ? value : DEFAULT_COOLDOWN_MS;
+  return Math.min(MAX_COOLDOWN_MS, Math.max(DEFAULT_COOLDOWN_MS, pinned ? pinned : wait));
+}
+
+export function markCooling(attempt, ms) {
+  if (!attempt) return;
+  const until = Date.now() + Math.min(MAX_COOLDOWN_MS, Math.max(DEFAULT_COOLDOWN_MS, Number(ms) || DEFAULT_COOLDOWN_MS));
+  COOLING.set(attempt.provider + ":" + attempt.model, until);
+}
+
+/** 지금 429 쿨다운 중인 프로바이더:모델 목록 (같은 턴·다음 턴에서 건너뛰는 데 쓴다). */
+export function coolingKeys() {
+  const now = Date.now();
+  const out = [];
+  for (const [key, until] of COOLING.entries()) {
+    if (until > now) out.push(key);
+    else COOLING.delete(key);
+  }
+  return out;
+}
+
+export function resetCooling() {
+  COOLING.clear();
 }
 
 export function exhaustionKey(providerId, model) {
@@ -345,8 +404,18 @@ function withTimeout(promise, ms, label) {
   return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
 }
 
-function extractText(data) {
-  if (!data) return "";
+/** Retry-After 헤더(초 또는 날짜) → ms. 없으면 0. */
+export function parseRetryAfter(value) {
+  const text = String(value == null ? "" : value).trim();
+  if (!text) return 0;
+  const seconds = Number(text);
+  if (Number.isFinite(seconds) && seconds >= 0) return Math.round(seconds * 1000);
+  const at = Date.parse(text);
+  if (Number.isFinite(at)) return Math.max(0, at - Date.now());
+  return 0;
+}
+
+function extractText(data) {  if (!data) return "";
   if (typeof data === "string") return data;
   if (typeof data.response === "string") return data.response;
   if (data.result && typeof data.result.response === "string") return data.result.response;
@@ -416,7 +485,14 @@ export async function callProvider(opts) {
     );
     if (!response.ok) {
       const text = await response.text().catch(() => "");
-      return { ok: false, kind: classifyFailure(response.status, text), status: response.status, reason: (response.status + " " + text).slice(0, 200) };
+      const retryAfter = parseRetryAfter(response.headers && typeof response.headers.get === "function" ? response.headers.get("retry-after") : null);
+      return {
+        ok: false,
+        kind: classifyFailure(response.status, text),
+        status: response.status,
+        retryAfterMs: retryAfter,
+        reason: (response.status + " " + text).slice(0, 200),
+      };
     }
     const payload = await response.json().catch(() => null);
     const text = extractText(payload);
@@ -460,6 +536,7 @@ export async function runPool(opts) {
   } = opts;
   const tried = [];
   const exhausted = [];
+  const cooling = [];
   const warnings = [];
   const dead = new Set();
   let skippedQuota = 0;
@@ -492,6 +569,31 @@ export async function runPool(opts) {
       fetchImpl,
       env,
     });
+    /* 429(분당 제한)는 오늘 소진이 아니다 — 짧은 쿨다운 뒤 같은 모델을 한 번 더 부른다(daily quota 는 제외). */
+    if (!result.ok && result.kind === "rate_limited") {
+      const wait = cooldownMs(attempt, result.retryAfterMs);
+      markCooling(attempt, wait);
+      const key = attempt.provider + ":" + attempt.model;
+      if (!cooling.includes(key)) cooling.push(key);
+      const left = deadline - Date.now();
+      if (left > wait + 2500) {
+        await new Promise((resolve) => setTimeout(resolve, wait));
+        const retry = await callProvider({
+          attempt,
+          messages,
+          maxTokens,
+          temperature,
+          timeoutMs: Math.min(perAttemptMs, Math.max(2000, deadline - Date.now())),
+          fetchImpl,
+          env,
+        });
+        if (retry.ok) result = retry;
+        else {
+          result = retry;
+          warnings.push(providerLabel(attempt.provider) + " 분당 요청 제한(429) — " + Math.round(wait / 1000) + "초 쿨다운 뒤 다시 시도했지만 아직 막혀 있습니다.");
+        }
+      }
+    }
     /* 5xx(용량 초과·일시 창애)는 잠깐씩 쉬며 다시 묻는다 — Gemini 무료 티어는 503(수요 급증)이 잦다.
        남은 프로바이더가 있으면 1번만, 마지막 살아 있는 프로바이더면 2번까지 시도한다. */
     const lastLive = pendingProviders(attempts, index, dead) === 1;
@@ -522,7 +624,7 @@ export async function runPool(opts) {
         if (!exhausted.includes(key)) exhausted.push(key);
         if (key === attempt.provider) dead.add(attempt.provider);
       } else if (result.kind === "auth") {
-        /* 키가 틀렸으면 그 프로바이더의 다른 모델도 같은 결과다. */
+        /* 키가 틀렸으니 그 프로바이더의 다른 모델도 같은 결과다. */
         dead.add(attempt.provider);
       }
       continue;
@@ -546,7 +648,7 @@ export async function runPool(opts) {
           if (retry.ok) {
             const again = transform(retry.text);
             if (again && again.ok) {
-              return { ok: true, provider: attempt.provider, model: attempt.model, data: again.data, text: retry.text, ms: Date.now() - started, tried, exhausted, warnings, repaired: true, skippedQuota };
+              return { ok: true, provider: attempt.provider, model: attempt.model, data: again.data, text: retry.text, ms: Date.now() - started, tried, exhausted, cooling, warnings, repaired: true, skippedQuota };
             }
           }
         }
@@ -556,10 +658,10 @@ export async function runPool(opts) {
       continue;
     }
 
-    return { ok: true, provider: attempt.provider, model: attempt.model, data: outcome.data, text: result.text, ms, tried, exhausted, warnings, skippedQuota };
+    return { ok: true, provider: attempt.provider, model: attempt.model, data: outcome.data, text: result.text, ms, tried, exhausted, cooling, warnings, skippedQuota };
   }
 
-  return { ok: false, tried, exhausted, warnings, reason: lastBad || "", skippedQuota };
+  return { ok: false, tried, exhausted, cooling, warnings, reason: lastBad || "", skippedQuota };
 }
 
 /** 실패 목록을 사람이 읽는 한 줄로. */

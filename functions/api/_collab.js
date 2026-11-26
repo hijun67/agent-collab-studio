@@ -88,6 +88,16 @@ export function hasHangul(text) {
   return /[가-힣]/.test(String(text || ""));
 }
 
+/** 한국어 문장에 섞이면 안 되는 문자 — 한자·중국어·일본어(가나)·베트남어 전용 글자.
+ *  v2.5.0: 모델이 중국어("仔细", "考虑")나 베트남어("đảm", "保")를 섞어 쓰는 문제를 막는다. */
+export function hasForeignScript(text) {
+  const body = String(text || "");
+  if (/[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\u3040-\u30ff\u31f0-\u31ff]/.test(body)) return true;
+  /* 베트남어 전용 라틴 확장 글자(đ, ơ, ư, ạ, ả, ấ, ầ, ẩ, ẫ, ậ, ắ, ằ, ẳ, ẵ, ặ, ẹ, ẻ, ẽ, ế, ề, ể, ễ, ệ, ỉ, ị, ọ, ỏ, ố, ồ, ổ, ỗ, ộ, ớ, ờ, ở, ỡ, ợ, ụ, ủ, ứ, ừ, ử, ữ, ự, ỳ, ỵ, ỷ, ỹ) */
+  if (/[đĐơƠưƯăĂâÂêÊôÔạảấầẩẫậắằẳẵặẹẻẽếềểễệỉịọỏốồổỗộớờởỡợụủứừửữựỳỵỷỹ]/.test(body)) return true;
+  return false;
+}
+
 /** 응답에서 JSON 객체 하나를 꺼낸다 (코드블록·머리말·꼬리말 허용). */
 export function parseJsonObject(text) {
   const raw = String(text || "").trim();
@@ -353,9 +363,10 @@ function directiveBlock(request) {
 }
 
 const JSON_RULES =
-  "출력은 JSON 객체 하나만. 코드블록·설명·인사말 금지. 모든 값은 한국어 문자열. " +
+  "출력은 JSON 객체 하나만. 코드블록·설명·인사말 금지. 모든 값은 **순수 한국어** 문자열. " +
+  "중국어·한자·일본어·베트남어를 절대 섞지 않는다(예: 仔细·考虑·保持·đảm 같은 글자 금지). 고유명사·코드·URL 만 원문 그대로. " +
   "숫자·기간·산출물 이름을 실제 과제 내용에 맞게 넣고, 없는 사실을 지어내지 않는다. " +
-  "같은 문장을 반복하지 않는다.";
+  "직전 발언을 그대로 반복하지 말고 한 걸음 더 구체적으로 쓴다 — 파일 이름·화면 요소 id·함수 이름·데이터 구조·검증 명령 같은 실제 구현 스펙으로 적는다.";
 
 const TURN_SHAPE =
   '{"say":["문단1","문단2"],"points":[{"t":"항목","d":"설명"}],"callout":{"label":"판단","text":"한 문장"},"artifact":{"title":"산출물 이름","markdown":"# 제목\\n- 항목"}}';
@@ -378,6 +389,7 @@ export function buildCollabPrompts(request) {
     "사용자가 넣은 실제 과제를 두고 피클(Lead)·제미나이 태스크(실행)·코덱스(검증)와 함께 10턴 협업을 이어갑니다. " +
     "지금은 " + request.stage + "턴 '" + (request.stageName || stage.focus.split(".")[0]) + "'이고, 당신은 " + personaOf(agent) + " " +
     "동료 발언을 존중하되 같은 말을 되풀이하지 말고 한 걸음 더 나아간 내용을 씁니다. " +
+    "답변은 반드시 한국어로만 씁니다(중국어·한자·일본어·베트남어 금지). " +
     JSON_RULES;
 
   const lines = [
@@ -450,7 +462,7 @@ function cleanArtifact(value, fallbackTitle) {
   return { title: cleanLine(value.title, 60) || fallbackTitle || "AI 산출물", markdown };
 }
 
-/** 모델의 턴 응답 → 화면용 데이터. 너무 빈약하면 null(폴백). */
+/** 모델의 턴 응답 → 화면용 데이터. 너무 빈약하거나 언어가 섞였으면 null(다음 AI/재시도). */
 export function normalizeTurnPayload(value, fallbackArtifactTitle) {
   if (!value || typeof value !== "object") return null;
   const say = cleanSay(value.say || value.paragraphs, 4);
@@ -458,14 +470,13 @@ export function normalizeTurnPayload(value, fallbackArtifactTitle) {
   const callout = cleanCallout(value.callout);
   if (!say.length && !points.length) return null;
   /* 한국어가 거의 없으면(영어로 새는 경우) 폴백한다. */
-  const joined = say.join(" ") + points.map((point) => point.t + " " + point.d).join(" ");
+  const joined = say.join(" ") + points.map((point) => point.t + " " + point.d).join(" ") + (callout ? callout.text : "");
   if (!hasHangul(joined)) return null;
-  return {
-    say,
-    points,
-    callout,
-    artifact: cleanArtifact(value.artifact, fallbackArtifactTitle),
-  };
+  /* 중국어·한자·일본어·베트남어가 섬이면 이 응답은 쓰지 않는다(다음 AI 가 이어받는다). */
+  if (hasForeignScript(joined)) return null;
+  const artifact = cleanArtifact(value.artifact, fallbackArtifactTitle);
+  if (artifact && hasForeignScript(artifact.markdown)) return { say, points, callout, artifact: null };
+  return { say, points, callout, artifact };
 }
 
 /** 모델의 최종 리포트 응답 → 부분 병합용 데이터. 쓸 만한 섹션이 3개 미만이면 null. */
@@ -509,7 +520,9 @@ export function normalizeReportPayload(value) {
   const callout = cleanCallout(value.callout);
   const sections = [roadmap.length >= 2, risks.length >= 2, checklist.length >= 3, gates.length >= 1, next.length >= 1, summary && (summary.goal || summary.criteria.length)].filter(Boolean).length;
   if (sections < 3) return null;
-  if (!hasHangul(say.join(" ") + roadmap.map((row) => row.step + row.detail).join(" "))) return null;
+  const all = say.join(" ") + roadmap.map((row) => row.step + row.detail).join(" ") + risks.map((row) => row.r + row.m).join(" ") + checklist.join(" ");
+  if (!hasHangul(all)) return null;
+  if (hasForeignScript(all)) return null;
   return { say, points, callout, summary, roadmap, risks, checklist, gates, next };
 }
 

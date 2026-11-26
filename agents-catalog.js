@@ -1,6 +1,6 @@
 /* 자동 생성 파일 — 원본은 agents-catalog.json 입니다. 직접 고치지 마세요. */
 window.ACS_CATALOG = {
-  "version": "2.4.0",
+  "version": "2.5.0",
   "updated": "2026-11-26",
   "note": "무료 에이전트 가이드(GUIDE) 26개 항목과 팀 투입 역할 정의. 일일 스캔은 tools 배열에 항목을 추가하고 injectable·role을 지정하면 된다. status(tone·label·note)가 있으면 카드에 상태 띠로 표시된다.",
   "roles": [

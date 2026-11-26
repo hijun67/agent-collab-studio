@@ -37,12 +37,13 @@ export async function onRequest(context) {
       pool,
       keyless: pool.filter((p) => p.keyless).length,
       byok: pool.filter((p) => !p.keyless).map((p) => p.id),
-      order: AI_POOL.map((p) => p.id).concat(["ollama", "local"]),
+      order: AI_POOL.map((p) => p.id).concat(["ollama"]),
       quotaScopes: AI_POOL.reduce((acc, p) => { acc[p.id] = p.quotaScope; return acc; }, {}),
       local: [
         { id: "ollama", label: "로컬 Ollama", url: "http://localhost:11434", note: "브라우저가 직접 호출" },
-        { id: "local", label: "로컬 결정론적 엔진", note: "최후 폴백" },
       ],
+      profiles: { collab: "사용자 무료 키 먼저 · Workers AI 경량 모델 마지막", build: "Workers AI 큰 모델 먼저" },
+      deterministicFallback: false,
     });
   }
 

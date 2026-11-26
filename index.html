@@ -47,6 +47,7 @@
           <div class="brand-line">
             <h1>Agent Collab Studio</h1>
             <span class="brand-badge" id="brandBadge">3-에이전트 협업</span>
+            <span class="brand-ver" id="brandVer" title="Agent Collab Studio 버전">v2.5.0</span>
           </div>
           <p id="missionSub">피클이 이끄는 리드 · 서브 협업 콘솔</p>
         </div>
@@ -812,7 +813,7 @@
         <button type="button" class="btn btn-sm" id="poolTest">전체 연결 테스트</button>
         <button type="button" class="btn btn-sm ghost" id="poolReset">오늘 소진 초기화</button>
       </div>
-      <p class="ai-note" id="poolNote">풀은 <b>Workers AI → Groq → Gemini → OpenRouter → Cerebras → Mistral → OpenAI → 로컬 Ollama → 로컬 엔진</b> 순서로 시도합니다. 한 AI가 <b>오늘 한도 소진(429·4006)</b>을 돌려주면 오늘 하루 건너뛰고 다음 AI가 그 턴을 이어서 만듭니다. <b>오늘 소진 초기화</b>는 이 브라우저의 표시만 지우며, 실제 무료 한도는 <b>00:00 UTC(한국 09:00)</b>에 다시 채워집니다. 키는 이 브라우저(localStorage)에만 저장됩니다.</p>
+      <p class="ai-note" id="poolNote">협업 턴은 <b>내 무료 키(Groq·Gemini 등) → Workers AI 경량 모델</b> 순서로, 🛠️ 빌드는 <b>Workers AI 큰 모델 → 다른 무료 AI</b> 순서로 시도합니다 — 협업이 하루 한도를 다 써서 빌드가 막히지 않게 <b>예산을 나눠</b> 씁니다. <b>오늘 한도 소진(4006·quota)</b>을 돌려준 AI는 오늘 하루 건너뛰고, <b>분당 제한(429)</b>은 짧은 쿨다운 뒤 다시 시도합니다. 결과물은 <b>실제 AI 응답으로만</b> 만들고, 모두 실패하면 로컬 템플릿 대신 안내를 보여 줍니다. 실제 무료 한도는 <b>00:00 UTC(한국 09:00)</b>에 다시 채워집니다. 키는 이 브라우저(localStorage)에만 저장됩니다.</p>
 
       <details class="ai-fixed" open>
         <summary>고정 엔진 (선택) — 한 AI로만 호출</summary>
@@ -833,7 +834,7 @@
         </label>
       </details>
       <p class="ai-note" id="aiByokHint" hidden>입력한 키는 <b>이 브라우저(localStorage)에만</b> 저장되고, 협업 턴을 만들 때 이 사이트의 함수로만 전송됩니다. 서버에 저장하지 않습니다.</p>
-      <p class="ai-note">키 없이도 <b>Workers AI</b>가 1순위로 동작하고, 실패하면 풀의 다음 AI → 로컬 엔진 순서로 자동 폴백합니다. 발언마다 <b>실제 응답한 AI</b> 배지가 붙습니다.</p>
+      <p class="ai-note">키 없이도 <b>Workers AI</b>로 시작하고, 막히면 풀의 다음 AI가 이어받습니다. 템플릿으로 지어내는 폴백은 v2.5.0 에서 폐기했습니다 — 어떤 경우에도 가짜 결과물을 만들지 않고, 발언마다 <b>실제 응답한 AI</b> 배지가 붙습니다.</p>
       <div class="ai-actions">
         <button type="button" class="btn btn-primary" id="aiSave">저장</button>
         <button type="button" class="btn" id="btnAiTest">연결 테스트</button>
@@ -867,7 +868,7 @@
       </div>
       <button type="button" class="btn btn-primary" id="btnBuildGenerate">프로젝트 생성</button>
     </div>
-    <p class="build-status" id="buildStatus">무료 AI 풀이 과제·리포트를 읽고 실제 동작하는 파일 세트를 만듭니다. AI가 없어도 로컬 생성기가 같은 일을 합니다.</p>
+    <p class="build-status" id="buildStatus">무료 AI 풀이 과제·리포트를 읽고 실제 동작하는 파일 세트를 만듭니다. AI가 모두 실패하면 템플릿 앱을 만들지 않고 한도·키 안내를 보여 줍니다.</p>
 
     <div class="build-work" id="buildWork" hidden>
       <nav class="build-tabs" role="tablist" aria-label="빌드 화면">
@@ -897,6 +898,7 @@
           <button type="button" class="mini" id="btnBuildRefresh">새로고침</button>
         </div>
         <iframe id="buildPreviewFrame" class="build-frame" sandbox="allow-scripts allow-forms allow-modals allow-popups" title="프로젝트 미리보기"></iframe>
+        <p class="build-preview-note" id="buildPreviewNote" aria-live="polite"></p>
       </div>
 
       <div class="build-pane" id="bPaneDeploy">
