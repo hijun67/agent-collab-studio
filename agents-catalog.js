@@ -1,8 +1,8 @@
 /* 자동 생성 파일 — 원본은 agents-catalog.json 입니다. 직접 고치지 마세요. */
 window.ACS_CATALOG = {
-  "version": "2.5.0",
-  "updated": "2026-11-26",
-  "note": "무료 에이전트 가이드(GUIDE) 26개 항목과 팀 투입 역할 정의. 일일 스캔은 tools 배열에 항목을 추가하고 injectable·role을 지정하면 된다. status(tone·label·note)가 있으면 카드에 상태 띠로 표시된다.",
+  "version": "2.6.0",
+  "updated": "2026-11-27",
+  "note": "무료 에이전트 가이드(GUIDE) 30개 항목과 팀 투입 역할 정의. 일일 스캔은 tools 배열에 항목을 추가하고 injectable·role을 지정하면 된다. status(tone·label·note)가 있으면 카드에 상태 띠로 표시된다.",
   "roles": [
     {
       "id": "lead",
@@ -338,8 +338,8 @@ window.ACS_CATALOG = {
       "en": "OpenCode · MIT",
       "free": "free",
       "badge": "오픈소스 MIT",
-      "one": "터미널에서 돌리는 오픈소스 코딩 에이전트. v2.4.0은 내 브라우저 로그인을 그대로 물려받고, 예약·이벤트 자동화까지 붙였다.",
-      "scope": "MIT 오픈소스 무료 · 계정 없이 무료 모델, 로컬 모델·다른 구독 연동 · v2.4.0 내장 데스크톱 브라우저가 Chrome·Edge·Firefox·Safari의 로그인·히스토리를 가져와 내가 열어 둔 탭을 그대로 읽고 조작(프로필 유지, 크로미움 확장 설치) · /automation으로 타이머·크론·MCP 이벤트에 프롬프트·스크립트·셸 명령 실행 · 로그인·2FA·결제는 사용자에게 넘김",
+      "one": "터미널에서 돌리는 오픈소스 코딩 에이전트. v2.4.0은 내 브라우저 로그인을 그대로 물려받았고, 이번 주 말까지 Hy4 Flash를 전용 무료로 쓴다.",
+      "scope": "MIT 오픈소스 무료 · 계정 없이 무료 모델, 로컬 모델·다른 구독 연동 · v2.4.0 내장 데스크톱 브라우저가 Chrome·Edge·Firefox·Safari의 로그인·히스토리를 가져와 내가 열어 둔 탭을 그대로 읽고 조작(프로필 유지, 크로미움 확장 설치) · /automation으로 타이머·크론·MCP 이벤트에 프롬프트·스크립트·셸 명령 실행 · 로그인·2FA·결제는 사용자에게 넘김 · 2026-11-26 공지로 Hy4 Flash 모델이 이번 주 말까지 OpenCode 전용 무료(하루 10T tokens 처리량)로 제공",
       "mission": {
         "title": "OpenCode + Browse로 버그 2건 고치고 화면 확인",
         "goal": "1주 안에 OpenCode로 저장소 버그 2건을 고치고 OpenCode Browse로 로그인된 화면을 직접 확인해 배포한다",
@@ -361,8 +361,8 @@ window.ACS_CATALOG = {
       "en": "구 Windsurf",
       "free": "free",
       "badge": "무료 $0",
-      "one": "Windsurf가 이름을 바꾼 AI 코드 에디터. Tab 자동완성과 인라인 편집은 무제한이다.",
-      "scope": "$0 Free 플랜(카드 불필요) · 무제한 Tab 자동완성·인라인 편집 + 일·주간으로 리셋되는 무료 에이전트 할당량(무료는 SWE 계열 모델만)",
+      "one": "Windsurf가 이름을 바꾼 AI 코드 에디터. Tab 자동완성은 무제한이고, 12월 8일까지 새 SWE-2.1 모델을 무료로 쓴다.",
+      "scope": "$0 Free 플랜(카드 불필요) · 무제한 Tab 자동완성·인라인 편집 + 일·주간으로 리셋되는 무료 에이전트 할당량(무료는 SWE 계열 모델만) · 2026-11-24 출시 SWE-2.1과 Cerebras 기반 SWE-2.1 Ultrafast가 2026-12-08까지 Devin Desktop과 CLI에서 무료",
       "mission": {
         "title": "Devin Desktop 무료 할당량으로 랜딩 페이지 다듬기",
         "goal": "2주 안에 Devin Desktop Free로 랜딩 페이지 문구와 레이아웃을 다듬고 모바일 화면까지 확인한다",
@@ -739,6 +739,98 @@ window.ACS_CATALOG = {
       "limit": "오픈소스 · 모델 별도",
       "role": "browser",
       "source": "https://mewcp.com/articles/agent-first-browse-shows-browser-agents-only-what-changed-on-the-page-cf1c7e"
+    },
+    {
+      "id": "nod",
+      "cat": "assistant",
+      "name": "Nod",
+      "en": "Nod · Apache-2.0",
+      "free": "free",
+      "badge": "오픈소스 · 로컬 앱",
+      "one": "n8n Labs가 공개한 로컬 개인비서 앱. 샌드박스 브라우저로 송장·회의 준비·구독 해지를 맡고, 결제·발송·게시 전에는 반드시 나에게 확인한다.",
+      "scope": "Apache-2.0 오픈소스 무료 · macOS 14+·Windows 11·Linux x64 데스크톱 앱, 내 PC에서 로컬 실행 · 모델은 ChatGPT Plus/Pro 구독 또는 본인 AI 키(BYOK) 연결 · 샌드박스 브라우저에서 송장 정리·회의 준비·구독 해지 같은 일을 여러 단계로 수행 · 결제·발송·게시처럼 되돌릴 수 없는 단계는 실행 전에 사용자 확인을 받음",
+      "mission": {
+        "title": "Nod로 송장·구독 정리 맡기기",
+        "goal": "2주 안에 Nod를 설치해 밀린 송장 5건 정리와 안 쓰는 구독 2건 해지를 맡기고, 결제·해지 단계만 직접 승인한다",
+        "context": "Apache-2.0 로컬 앱, ChatGPT Plus 구독으로 모델 연결, 하루 30분, 예산 0원, 결제·발송은 확인 후"
+      },
+      "agentId": "nod",
+      "injectable": true,
+      "self": false,
+      "initial": "Nd",
+      "color": "#5eead4",
+      "limit": "오픈소스 · 모델 비용 별도",
+      "role": "exec",
+      "source": "https://www.opensourceprojects.dev/post/nod"
+    },
+    {
+      "id": "browseros-neo",
+      "cat": "browser",
+      "name": "BrowserOS neo",
+      "en": "BrowserOS neo · AGPL-3.0",
+      "free": "free",
+      "badge": "오픈소스 · $0",
+      "one": "에이전트만을 위해 만든 두 번째 크로미움 브라우저. 쓰던 크롬의 로그인·북마크·확장을 한 번에 가져오고, Claude Code·Codex·Cursor가 MCP로 조종한다.",
+      "scope": "AGPL-3.0 오픈소스 무료($0, 본인 AI 플랜·키 사용) · macOS·Windows·Linux · 기존 Chrome의 로그인·북마크·확장을 1클릭으로 가져오는 에이전트 전용 두 번째 Chromium 브라우저 · Claude Code·Codex·Cursor가 MCP로 제어 · 에이전트 작업과 내 브라우징을 분리",
+      "mission": {
+        "title": "BrowserOS neo로 로그인된 조사 자동화",
+        "goal": "1주 안에 크롬 로그인을 BrowserOS neo로 옮기고, 이미 로그인된 사이트 3곳의 자료 조사를 Codex에 MCP로 맡겨 비교표 1장으로 받는다",
+        "context": "무료(본인 AI 플랜 사용), 하루 30분, 예산 0원, 결제·게시는 직접"
+      },
+      "agentId": "browseros-neo",
+      "injectable": true,
+      "self": false,
+      "initial": "BN",
+      "color": "#60a5fa",
+      "limit": "오픈소스 · 모델 비용 별도",
+      "role": "browser",
+      "source": "https://ntsot.com/browseros-neo-review/"
+    },
+    {
+      "id": "daiv-3",
+      "cat": "coding",
+      "name": "DAIV 3.0",
+      "en": "DAIV · Apache-2.0",
+      "free": "partial",
+      "badge": "오픈소스 · 셀프호스트",
+      "one": "내 서버에서 GitHub·GitLab 이슈를 읽어 계획을 댓글로 남기고 PR/MR을 만드는 코딩 에이전트. CI가 실패하면 스스로 고친다.",
+      "scope": "Apache-2.0 오픈소스 무료 · 자체 서버(Docker Compose)에 셀프호스트 · GitHub·GitLab에서 daiv 라벨이 붙은 이슈를 읽어 계획 댓글을 남긴 뒤 PR/MR 생성 · CI 실패 시 로그를 읽고 자가 수정해 다시 올림 · 모델은 Google·OpenRouter·vLLM/LiteLLM 등 BYOK, MCP 엔드포인트 지원",
+      "mission": {
+        "title": "DAIV 3.0으로 이슈→PR 자동화",
+        "goal": "2주 안에 DAIV를 자체 서버에 띄우고 daiv 라벨 이슈 3건을 계획 댓글과 PR까지 자동으로 끝내고, CI 실패 1건을 스스로 고치게 한다",
+        "context": "Docker Compose 셀프호스트, 모델은 OpenRouter 키(BYOK), 주말 하루 2시간, 예산 0원(모델 사용료 별도)"
+      },
+      "agentId": "daiv-3",
+      "injectable": true,
+      "self": false,
+      "initial": "Dv",
+      "color": "#c4b5fd",
+      "limit": "셀프호스트 · 모델 BYOK",
+      "role": "code",
+      "source": "https://daivagent.com/blog/daiv-3/"
+    },
+    {
+      "id": "free-claude-code",
+      "cat": "local",
+      "name": "Free Claude Code (FCC)",
+      "en": "FCC · AGPL-3.0",
+      "free": "free",
+      "badge": "오픈소스 · 무료 티어 연결",
+      "one": "Claude Code·Codex·OpenCode·Cline 등 12개 코딩 도구를 61개 무료 티어 프로바이더에 연결하는 로컬 프록시. 실제 Claude가 아니라 고른 무료 모델로 돌아간다.",
+      "scope": "AGPL-3.0 오픈소스 무료 · 내 PC에서 도는 로컬 프록시(Alishahryar1/free-claude-code, 73k stars) · Claude Code·Codex·OpenCode·Cline 등 12개 코딩 도구를 NVIDIA NIM·OpenRouter·Groq·Gemini·Ollama 등 61개 무료 티어 프로바이더로 연결 · 실제 Claude 모델이 아니라 선택한 모델로 동작(도구 이름만 Claude Code)",
+      "mission": {
+        "title": "FCC로 코딩 도구를 무료 모델에 붙이기",
+        "goal": "1주 안에 FCC 프록시를 띄워 Claude Code를 NVIDIA NIM·Gemini 무료 티어로 돌리고, 같은 과제를 두 프로바이더로 비교해 쓸 조합 1개를 고른다",
+        "context": "오픈소스 무료, 무료 티어 API 키 1~2개, 하루 1시간, 예산 0원"
+      },
+      "agentId": "free-claude-code",
+      "injectable": true,
+      "self": false,
+      "initial": "Fc",
+      "color": "#fbbf24",
+      "limit": "오픈소스 · 무료 티어 키",
+      "role": "local",
+      "source": "https://www.claudeagents.co/blog/free-claude-code-github"
     }
   ]
 };

@@ -664,7 +664,7 @@
   const STAGE_NAMES = ['미션 브리핑', '과제 분해', '심층 검증', '중간 조율', '수정 실행안', '품질 게이트', '산출물 작성', '실행 체크리스트', '최종 검증', '최종 종합'];
 
   /* ─────────── 4-0. 에이전트 카탈로그 (agents-catalog.json 원본) ───────────
-     가이드 26개 항목과 팀 투입 역할 정의는 agents-catalog.json 이 원본이고,
+     가이드 30개 항목과 팀 투입 역할 정의는 agents-catalog.json 이 원본이고,
      브라우저에서 파일 하나로도 열리도록 scripts/catalog.mjs 가 agents-catalog.js 사본을 만든다. */
   const CATALOG = (window.ACS_CATALOG && typeof window.ACS_CATALOG === 'object') ? window.ACS_CATALOG : { tools: [], roles: [], core: [] };
   const ROLES = (CATALOG.roles || []).slice();
