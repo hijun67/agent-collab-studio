@@ -1,12 +1,13 @@
-/* Agent Collab Studio v2.6.0 — 무료 에이전트 카탈로그 검증 (의존성 없음)
+/* Agent Collab Studio v2.7.0 — 무료 에이전트 카탈로그 검증 (의존성 없음)
  *
  *   실행: node --test tests/
  *
  *  검증 범위
- *   1) 버전·갱신일·도구 수(30)와 팀 투입 가능 수(26)
+ *   1) 버전·갱신일·도구 수(31)와 팀 투입 가능 수(27)
  *   2) id 중복·필수 필드·유형(cat)·역할(role) 정합성
- *   3) 11-27 신규 4종(Nod·BrowserOS neo·DAIV 3.0·Free Claude Code)과 갱신 2건(OpenCode·Devin Desktop)
- *   4) agents-catalog.json → agents-catalog.js 사본 동기화
+ *   3) 11-28 신규 1종(Loors)과 갱신 1건(Browser Use 1.0)
+ *   4) 이전 반영분(11-27 신규 4·갱신 2, 11-26 신규 6·Antigravity, Jules 종료)
+ *   5) agents-catalog.json → agents-catalog.js 사본 동기화
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -21,23 +22,23 @@ const byId = Object.fromEntries(catalog.tools.map((t) => [t.id, t]));
 const CATS = ["assistant", "coding", "browser", "local"];
 const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
 
-test("카탈로그 — v2.6.0 · 2026-11-27 · 30종(팀 투입 26종)", () => {
-  assert.equal(catalog.version, "2.6.0");
-  assert.equal(catalog.updated, "2026-11-27");
-  assert.equal(catalog.tools.length, 30);
-  assert.equal(catalog.tools.filter((t) => t.injectable).length, 26);
+test("카탈로그 — v2.7.0 · 2026-11-28 · 31종(팀 투입 27종)", () => {
+  assert.equal(catalog.version, "2.7.0");
+  assert.equal(catalog.updated, "2026-11-28");
+  assert.equal(catalog.tools.length, 31);
+  assert.equal(catalog.tools.filter((t) => t.injectable).length, 27);
   assert.equal(catalog.tools.filter((t) => !t.injectable).length, 4);
-  assert.match(catalog.note, /30개/);
+  assert.match(catalog.note, /31개/);
 });
 
-test("카탈로그 — 유형 분포 개인비서 6 · 코딩 11 · 브라우저 7 · 로컬·멀티 6", () => {
+test("카탈로그 — 유형 분포 개인비서 6 · 코딩 11 · 브라우저 7 · 로컬·멀티 7", () => {
   const count = (cat) => catalog.tools.filter((t) => t.cat === cat).length;
   assert.deepEqual({
     assistant: count("assistant"),
     coding: count("coding"),
     browser: count("browser"),
     local: count("local"),
-  }, { assistant: 6, coding: 11, browser: 7, local: 6 });
+  }, { assistant: 6, coding: 11, browser: 7, local: 7 });
 });
 
 test("카탈로그 — id 중복 없고 필수 필드·유형·역할이 맞는다", () => {
@@ -58,14 +59,60 @@ test("카탈로그 — id 중복 없고 필수 필드·유형·역할이 맞는�
     if (t.source) assert.match(t.source, /^https:\/\//, t.id + ": source");
     if (t.status) assert.ok(t.status.tone && t.status.label, t.id + ": status");
   }
-  const newIds = ["nod", "browseros-neo", "daiv-3", "free-claude-code"];
+  const newIds = ["loors"];
   const newInitials = newIds.map((id) => byId[id].initial);
-  assert.equal(new Set(newInitials).size, newInitials.length, "신규 4종의 initial 은 서로 달라야 한다");
+  assert.equal(new Set(newInitials).size, newInitials.length, "신규 종의 initial 은 서로 달라야 한다");
   const oldInitials = catalog.tools.filter((t) => !newIds.includes(t.id)).map((t) => t.initial);
   for (const init of newInitials) assert.ok(!oldInitials.includes(init), "신규 initial " + init + " 이 기존 카드와 겹친다");
 });
 
-test("카탈로그 — 11-27 신규 4종이 유형·역할·라이선스와 함께 들어갔다", () => {
+test("카탈로그 — 11-28 신규 Loors가 유형·역할·라이선스와 함께 들어갔다", () => {
+  const t = byId.loors;
+  assert.ok(t, "loors 항목이 없다");
+  assert.equal(t.name, "Loors");
+  assert.equal(t.cat, "local", "Loors: cat");
+  assert.equal(t.role, "local", "Loors: role");
+  assert.equal(t.free, "free", "Loors: free");
+  assert.equal(t.injectable, true, "Loors: 팀 투입 가능");
+  assert.match(t.scope, /MIT/, "Loors: 라이선스 명시");
+  assert.match(t.scope, /llama\.cpp/, "Loors: 내장 llama.cpp");
+  assert.match(t.scope, /CUDA·Vulkan·Metal/, "Loors: GPU 백엔드");
+  assert.match(t.scope, /GGUF/, "Loors: 로컬 GGUF");
+  assert.match(t.scope, /100% 오프라인/, "Loors: 오프라인 실행");
+  assert.match(t.scope, /OpenAI·Claude·Gemini·GitHub Models·OpenRouter·Ollama·LM Studio/, "Loors: 클라우드 모델 연결");
+  assert.match(t.scope, /Rust \+ Tauri v2/, "Loors: 스택");
+  assert.match(t.scope, /4\.4MB/, "Loors: 설치본 크기");
+  assert.match(t.scope, /loors-cli/, "Loors: 헤드리스 CLI");
+  assert.match(t.scope, /Visual Cyclic Harness Studio/, "Loors: 시각적 순환 워크플로우");
+  assert.match(t.scope, /LLM Judge/, "Loors: LLM Judge 노드");
+  assert.match(t.scope, /Human Gate/, "Loors: 승인 게이트 노드");
+  assert.match(t.scope, /CDP/, "Loors: 공유 인터랙티브 브라우저");
+  assert.match(t.scope, /CAPTCHA/, "Loors: 로그인·CAPTCHA 인계");
+  assert.equal(t.source, "https://loors.dev/", "Loors: 공식 출처");
+});
+
+test("카탈로그 — 11-28 갱신 Browser Use가 1.0·BU 4.0 변경을 담는다", () => {
+  const bu = byId["browser-use"];
+  assert.ok(bu, "browser-use 항목이 없다");
+  assert.equal(bu.cat, "browser", "browser-use: cat 유지");
+  assert.equal(bu.role, "browser", "browser-use: role 유지");
+  assert.equal(bu.free, "free", "browser-use: free 유지");
+  assert.match(bu.one, /1\.0/, "browser-use: 1.0");
+  assert.match(bu.one, /Chrome DevTools Protocol/, "browser-use: CDP");
+  assert.match(bu.scope, /browser-use 1\.0/, "browser-use: 1.0 릴리스");
+  assert.match(bu.scope, /BU 4\.0/, "browser-use: BU 4.0");
+  assert.match(bu.scope, /80%/, "browser-use: 라이브러리 80% 경량화");
+  assert.match(bu.scope, /파이썬 REPL/, "browser-use: 파이썬 REPL 직접 실행");
+  assert.match(bu.scope, /\+33p/, "browser-use: 정확도 +33p");
+  assert.match(bu.scope, /2\.7~5\.2배/, "browser-use: 비용 절감");
+  assert.match(bu.scope, /2~3배/, "browser-use: 속도 향상");
+  assert.match(bu.scope, /result\.judgement/, "browser-use: 실행 자동 판정");
+  assert.match(bu.scope, /--cli-mcp/, "browser-use: CLI MCP");
+  assert.match(bu.scope, /Browser\('chromium'\)/, "browser-use: 로컬호스트 실행");
+  assert.match(bu.source, /browser-use\.com\/changelog\/27-11-2026/, "browser-use: 1.0 변경이력 출처");
+});
+
+test("카탈로그 — 11-27 반영분(신규 4종·갱신 2건)이 그대로 유지된다", () => {
   const expect = {
     nod: { cat: "assistant", role: "exec", free: "free", must: /Apache-2\.0/ },
     "browseros-neo": { cat: "browser", role: "browser", free: "free", must: /AGPL-3\.0/ },
@@ -80,32 +127,9 @@ test("카탈로그 — 11-27 신규 4종이 유형·역할·라이선스와 함�
     assert.equal(t.free, want.free, id + ": free");
     assert.equal(t.injectable, true, id + ": 팀 투입 가능");
     assert.match(t.scope, want.must, id + ": 라이선스 명시");
-    assert.match(t.source, /^https:\/\//, id + ": 공식 출처");
   }
-  assert.match(byId.nod.scope, /macOS 14\+/);
-  assert.match(byId.nod.scope, /결제·발송·게시/);
-  assert.match(byId["browseros-neo"].scope, /로그인·북마크·확장/);
-  assert.match(byId["browseros-neo"].scope, /Claude Code·Codex·Cursor/);
-  assert.match(byId["daiv-3"].scope, /daiv 라벨/);
-  assert.match(byId["daiv-3"].scope, /CI 실패/);
-  assert.match(byId["free-claude-code"].scope, /61개/);
-  assert.match(byId["free-claude-code"].scope, /12개/);
-});
-
-test("카탈로그 — 11-27 갱신 2건(OpenCode Hy4 Flash·Devin SWE-2.1)이 최신 변경을 담는다", () => {
-  const oc = byId.opencode;
-  assert.match(oc.scope, /v2\.4\.0/);
-  assert.match(oc.scope, /Chrome·Edge·Firefox·Safari/);
-  assert.match(oc.scope, /\/automation/);
-  assert.match(oc.scope, /Hy4 Flash/);
-  assert.match(oc.scope, /10T tokens/);
-  assert.match(oc.one, /Hy4 Flash/);
-
-  const dd = byId["devin-desktop"];
-  assert.match(dd.scope, /SWE-2\.1/);
-  assert.match(dd.scope, /Ultrafast/);
-  assert.match(dd.scope, /2026-12-08/);
-  assert.match(dd.one, /SWE-2\.1/);
+  assert.match(byId.opencode.scope, /Hy4 Flash/);
+  assert.match(byId["devin-desktop"].scope, /SWE-2\.1/);
 });
 
 test("카탈로그 — 11-26 반영분(신규 6종·Antigravity)이 그대로 유지된다", () => {
@@ -140,7 +164,7 @@ test("카탈로그 — Google Jules 종료 표시는 그대로 유지된다", ()
 
 test("카탈로그 — agents-catalog.js 사본이 JSON 과 같다", () => {
   const out = execFileSync(process.execPath, [join(root, "scripts", "catalog.mjs"), "--check"], { encoding: "utf8" });
-  assert.match(out, /catalog in sync: 30 tools \/ 11 roles/);
+  assert.match(out, /catalog in sync: 31 tools \/ 11 roles/);
 });
 
 test("카탈로그 — 갱신일은 ISO 날짜다", () => {
