@@ -1,6 +1,6 @@
 {
   "name": "agent-collab-studio",
-  "version": "2.5.0",
+  "version": "2.7.0",
   "private": true,
   "description": "피클·제미나이 태스크·코덱스 협업 스튜디오 — 실제 AI 로만 앱을 만드는 협업 스튜디오(7+1 아키타입) + 실제 파일 생성·GitHub Pages/Cloudflare Pages 배포",
   "type": "module",

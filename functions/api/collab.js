@@ -171,7 +171,7 @@ export async function onRequest(context) {
       ok: true,
       service: "agent-collab-studio",
       endpoint: "collab",
-      version: "2.5.0",
+      version: "2.7.0",
       workersAi: Boolean(env && env.AI && typeof env.AI.run === "function"),
       models: COLLAB_MODELS,
       byok: Object.keys(BYOK_PROVIDERS),

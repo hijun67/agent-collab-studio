@@ -121,5 +121,5 @@ test("/api/collab GET — 풀에 로컬 결정론적 엔진이 없다", async ()
   assert.equal(res.status, 200);
   assert.equal(data.rotation, true);
   assert.ok(!data.pool.some((p) => p.id === "local"));
-  assert.equal(data.version, "2.5.0");
+  assert.equal(data.version, "2.7.0");
 });
